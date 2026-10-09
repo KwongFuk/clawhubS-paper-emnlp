@@ -1,0 +1,200 @@
+% ============================================================
+%  SkillStrike: Exploiting Compositional Attack Surfaces
+%  in LLM Agent Skill Marketplaces
+%
+%  Target: USENIX Security 2027 / NDSS 2027
+%  Format: NDSS official template (IEEE two-column)
+% ============================================================
+
+\documentclass[letterpaper,twocolumn,10pt]{article}
+
+% -- NDSS 2027 template packages --
+\usepackage{ndss2025}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{microtype}
+\usepackage{times}
+
+% -- Standard packages --
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{enumitem}
+\usepackage{xspace}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{balance}
+
+% -- Listings --
+\lstset{
+  basicstyle=\ttfamily\scriptsize,
+  frame=single, breaklines=true,
+  captionpos=b,
+}
+
+% -- Theorem environments --
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+\newtheorem{observation}{Observation}
+\newtheorem{proposition}{Proposition}
+
+% -- Colors --
+\definecolor{riskred}{rgb}{0.65,0.10,0.10}
+\definecolor{safegreen}{rgb}{0.08,0.47,0.16}
+\definecolor{warnorng}{rgb}{0.78,0.39,0.0}
+
+% -- Macros --
+\newcommand{\sysname}{\textsc{SkillStrike}\xspace}
+\newcommand{\cape}{\textsc{CAPE}\xspace}
+\newcommand{\lscps}{\textsc{LSCPS}\xspace}
+\newcommand{\clawhub}{\textsc{ClawHub}\xspace}
+\newcommand{\skillssh}{\textsc{skills.sh}\xspace}
+\newcommand{\eg}{\textit{e.g.,}\xspace}
+\newcommand{\ie}{\textit{i.e.,}\xspace}
+\newcommand{\cf}{\textit{cf.}\xspace}
+\newcommand{\etal}{\textit{et al.}\xspace}
+% Dataset numbers
+\newcommand{\NskillsCH}{18{,}443\xspace}
+\newcommand{\NskillsSH}{116{,}208\xspace}
+\newcommand{\NsrcCH}{15{,}307\xspace}
+\newcommand{\NsinkCH}{4{,}699\xspace}
+\newcommand{\NselfExfil}{4{,}154\xspace}  % skills.sh LSCPS candidates
+\newcommand{\NpatternsLSCPS}{300\xspace}
+\newcommand{\NcodexConfirm}{197\xspace}
+% ClawHub experiment
+\newcommand{\NpairsCH}{125\xspace}
+\newcommand{\NpairsCHsuccess}{91\xspace}
+\newcommand{\PairsCHrate}{73\%\xspace}
+\newcommand{\NpairsCHCone}{97\xspace}
+\newcommand{\NpairsCHConeok}{89\xspace}
+\newcommand{\PairsCHConeRate}{92\%\xspace}
+\newcommand{\NpairsCHshell}{70\xspace}
+\newcommand{\PairsCHshellRate}{100\%\xspace}
+\newcommand{\NpairsCHproc}{17\xspace}
+\newcommand{\PairsCHprocRate}{100\%\xspace}
+% skills.sh experiment
+\newcommand{\NpairsSS}{197\xspace}
+\newcommand{\NpairsSSlaunched}{166\xspace}
+\newcommand{\NpairsSSsuccess}{165\xspace}
+\newcommand{\PairsSSrate}{99\%\xspace}
+\newcommand{\NpairsSSshell}{75\xspace}
+\newcommand{\PairsSSshellRate}{100\%\xspace}
+\newcommand{\NpairsSSnet}{26\xspace}
+\newcommand{\PairsSSnetRate}{96\%\xspace}
+\newcommand{\NpairsSSmem}{20\xspace}
+\newcommand{\PairsSSMemRate}{100\%\xspace}
+\newcommand{\NpairsSSfile}{23\xspace}
+\newcommand{\PairsSSFileRate}{100\%\xspace}
+\newcommand{\NpairsSSboot}{9\xspace}
+\newcommand{\PairsSSBootRate}{100\%\xspace}
+
+% -- Paper metadata --
+\title{\sysname: Exploiting Compositional Attack Surfaces\\
+       in LLM Agent Skill Marketplaces}
+
+\author{Anonymous Submission}
+
+\begin{document}
+\maketitle
+
+% ============================================================
+\begin{abstract}
+% ============================================================
+Modern LLM agent platforms allow users to install
+third-party \emph{skills}---plugins granting the agent ambient authority
+over files, credentials, the shell, and the network.
+When multiple skills are co-installed, they share a single agent context,
+creating an implicit composition whose aggregate capability set
+is never disclosed to the user.
+We identify and formalize a new attack class---
+\emph{skill composition attacks}---in which an adversary exploits
+this gap by poisoning a benign \emph{source} skill's output channel
+to trigger an undisclosed dangerous capability of a co-installed
+\emph{sink} skill, without any user action beyond normal agent use.
+
+We make four contributions.
+First, we design \lscps (Layered Structured Capability Pattern Search),
+a static analysis framework that identifies dangerous source-sink pairs
+across a marketplace corpus using \NpatternsLSCPS{}+ regex patterns
+organized into five sink capability families (shell, filesystem,
+network exfil, memory, persistence) and five source injection channels.
+Applied to \NskillsCH{} \clawhub{} skills, \lscps identifies \NsinkCH{}
+sink skills with undisclosed dangerous capabilities and \NsrcCH{}
+viable source skills.
+Second, we validate this surface with a two-stage LLM audit
+using chain-of-thought reasoning on SKILL.md documentation,
+confirming \NcodexConfirm{} viable attack paths in \skillssh{}.
+Third, we demonstrate the attacks on two live agent platforms.
+On \clawhub{} (OpenClaw agent, \NpairsCH{} source-sink pairs):
+all \NpairsCHshell{} shell-execution sink pairs succeed (\PairsCHshellRate{})
+and \NpairsCHConeok/\NpairsCHCone{} LLM-context injection pairs succeed (\PairsCHConeRate{}).
+On \skillssh{} (Codex agent, \NpairsSS{} Codex-confirmed pairs):
+\NpairsSSsuccess/\NpairsSSlaunched{} pairs produce verified dangerous
+side effects (\PairsSSrate{}), spanning all five sink channel types,
+with zero install-time safety gates triggered.
+These results establish skill composition attacks as a concrete,
+cross-platform threat requiring mandatory capability isolation
+at the agent ecosystem level.
+\end{abstract}
+
+% ============================================================
+\section{Introduction}
+\label{sec:intro}
+% ============================================================
+\input{sections/01_introduction}
+
+% ============================================================
+\section{Background and Threat Model}
+\label{sec:background}
+% ============================================================
+\input{sections/02_background}
+
+% ============================================================
+\section{Static Attack Surface Discovery}
+\label{sec:static}
+% ============================================================
+\input{sections/03_static}
+
+% ============================================================
+\section{LLM Semantic Verification}
+\label{sec:llm}
+% ============================================================
+\input{sections/04_llm_verify}
+
+% ============================================================
+\section{Empirical Validation: \clawhub{} Platform}
+\label{sec:eval_ch}
+% ============================================================
+\input{sections/05_eval_clawhub}
+
+% ============================================================
+\section{Empirical Validation: \skillssh{} Platform}
+\label{sec:eval_ss}
+% ============================================================
+\input{sections/06_eval_skillssh}
+
+% ============================================================
+\section{Discussion}
+\label{sec:discussion}
+% ============================================================
+\input{sections/07_discussion}
+
+% ============================================================
+\section{Related Work}
+\label{sec:related}
+% ============================================================
+\input{sections/08_related}
+
+% ============================================================
+\section{Conclusion}
+\label{sec:conclusion}
+% ============================================================
+\input{sections/09_conclusion}
+
+\balance
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}

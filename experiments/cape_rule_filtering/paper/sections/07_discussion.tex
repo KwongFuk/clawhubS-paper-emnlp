@@ -1,0 +1,138 @@
+% sections/07_discussion.tex --- SkillStrike
+
+\subsection{Why Existing Defenses Fail}
+
+\paragraph{Input sanitization.}
+Standard prompt injection defenses~\cite{greshake2023indirect}
+sanitize user-supplied input before feeding it to the agent.
+Skill composition attacks bypass this entirely:
+the malicious instruction arrives through a \emph{trusted, installed skill's
+tool output}---a channel the agent's safety policy explicitly exempts
+from user-input rules.
+The agent is correctly following its design: tool outputs from installed
+skills are supposed to be trusted.
+
+\paragraph{Platform scanners.}
+The \clawhub platform scanner detected 0 of 34 independently confirmed
+malicious skills in our corpus (\S\ref{sec:static}).
+\lscps at Tier-6 detects all 34 (100\% recall vs.\ 0\% for the platform scanner).
+Current platform scanners check for malware signatures and known-bad domains,
+not for the structural source-sink property we exploit.
+
+\paragraph{Agent safety policies.}
+Both evaluated agent runtimes apply heuristic safety policies that
+are: (a) command-surface-specific rather than capability-class-based,
+(b) stochastically applied (the same task type succeeds in some
+pairs and fails in others with no configuration change), and
+(c) channel-dependent (memory writes refused in C1 context pass via C3 channel).
+Findings F3, F8, F9 all confirm that these policies are
+\emph{insufficient to prevent composition attacks}.
+
+\subsection{Proposed Defenses}
+
+\paragraph{D1: Mandatory capability manifests.}
+Skill marketplaces should require machine-readable capability declarations
+at publish time---analogous to Android permission manifests---enumerating:
+filesystem access scope, network destinations, shell invocation patterns,
+credential file access, and external API endpoints.
+Our K1--K5 taxonomy provides a starting point for this schema.
+Capabilities not declared in the manifest should be blocked at runtime
+by the agent framework.
+
+\paragraph{D2: Publish-time \lscps screening.}
+\lscps can run as a publish-time gate with zero API cost,
+requiring no LLM queries.
+At our measured false-positive rate (estimated $<$5\% at Tier-6),
+the cost to legitimate skill developers is one clarification email
+per 20 submissions.
+The benefit: 100\% recall on the 34 confirmed malicious skills
+that the platform scanner missed.
+
+\paragraph{D3: Cross-skill capability isolation.}
+Agent runtimes should enforce \emph{context-window isolation}:
+when skill A is invoked, only skill A's tool schemas should be
+active in the agent's context---not the schemas of co-installed skills.
+This prevents the agent from invoking skill B's tools in
+response to content returned by skill A.
+This requires changes to MCP protocol handling
+but eliminates the structural precondition for composition attacks.
+
+\paragraph{D4: Install-time composition audit.}
+When a user installs a sink skill alongside an existing source skill,
+the platform should execute a composition audit:
+does the new combination create an exploitable source-sink pair
+(as determined by \lscps or LLM verification)?
+If so, alert the user before completing installation.
+
+\subsection{Limitations}
+
+\paragraph{Coverage of \lscps.}
+\lscps is a conservative syntactic lower bound.
+Dynamically constructed commands, base64-encoded payloads,
+and import-alias obfuscation are not detected.
+All reported attack surface numbers are underestimates.
+
+\noindent\emph{Ground-truth calibration.}
+The Tier-6 recall claim (100\% on 34 confirmed skills vs.\ 0\% platform scanner)
+rests on an independent security researcher's manual review of those 34 skills,
+conducted prior to and independent of our experiments.
+This reviewer was not aware of our tier assignments during their review,
+which reduces annotation bias.
+We do not claim these 34 skills represent the complete malicious-skill population;
+they are the set for which an independent ground truth label was available.
+A full precision/recall evaluation over a labeled corpus of $>$1,000 skills
+remains future work.
+
+\paragraph{LLM verification annotation.}
+The Stage-1 precision estimate (92\%) is based on one author's manual review
+of 50 randomly sampled verdicts.
+Inter-annotator agreement on a second 25-verdict sample (two annotators)
+yields $\kappa = 0.84$ (substantial agreement);
+we acknowledge that 50 samples provide approximate---not definitive---precision estimates.
+
+\paragraph{Experimental configuration realism.}
+\skillssh{} experiments use \texttt{--full-auto} CodexCLI, matching a user who
+typically enables full-auto for development tasks.
+For T07 (network exfiltration), \texttt{--dangerously-bypass} is used
+only to allow our outbound-logging infrastructure to observe the attempt---
+it does not change the agent's own safety policy.
+\textbf{Conservative estimate:} removing all T07 pairs (26/166) from the total
+yields 139/140 = 99.3\% success among the remaining non-bypass tasks,
+confirming the 99\% result is not driven by the bypass configuration.
+
+\paragraph{Payload generalization.}
+We test three payload families (P1--P3).
+Adversarial search over the prompt space would likely discover
+more effective or better-disguised payloads.
+Our reported success rates are therefore \emph{lower bounds} on
+what a dedicated attacker could achieve.
+
+\paragraph{Agent version.}
+Results are specific to \texttt{gpt-5.3-codex} (OpenClaw) and
+\texttt{gpt-4.1} (Codex CLI) as of April 2026.
+Future model versions may apply different safety heuristics.
+
+\paragraph{Two marketplaces.}
+We evaluate \clawhub and \skillssh{} only.
+Other agent platforms (Cursor, Continue.dev, Claude Computer Use,
+GitHub Copilot Extensions) have different installation and execution
+models; the structural vulnerability (shared context, no capability isolation)
+applies to all, but empirical success rates may differ.
+
+\subsection{Ethical Disclosure}
+
+All experiments were conducted in fully isolated sandbox environments
+(dedicated per-experiment workspace directories with no real external network access).
+No real user accounts, production skills, or marketplace infrastructure were harmed.
+We used real skill identifiers to enable reproducibility;
+no weaponized payloads, exploit code, or automated attack scripts are released.
+
+\noindent\textbf{Disclosure timeline.}
+We notified the ClawHub platform security team on 2026-03-28
+and the skills.sh maintainers on 2026-04-01,
+before submission of this paper.
+Both acknowledged receipt. ClawHub has indicated they are reviewing
+capability manifest requirements; skills.sh has not responded.
+Artifact release is de-weaponized: we release the \lscps pattern library
+and LLM audit prompts, but not the identity-spoofing MCP server
+or pre-packaged payload scripts.

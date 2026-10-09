@@ -1,0 +1,232 @@
+% ============================================================
+%  CapMismatch: Measuring Capability-Description Inconsistency
+%  and Validating Source-Sink Attack Risks in LLM Agent
+%  Skill Marketplaces
+%
+%  Target: NDSS 2027
+%  Format: NDSS official template (IEEE two-column)
+%  Body:   ≤ 10 pages (excl. references & appendices per NDSS rules)
+% ============================================================
+
+\documentclass[letterpaper,twocolumn,10pt]{article}
+
+% ── NDSS 2027 template packages ──────────────────────────────────────────────
+\usepackage{ndss2025}        % official NDSS style file (rename if needed)
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{microtype}
+\usepackage{times}
+
+% ── Standard packages ────────────────────────────────────────────────────────
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{subcaption}
+\usepackage{enumitem}
+\usepackage{xspace}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{balance}
+
+% ── Listings ─────────────────────────────────────────────────────────────────
+\lstset{
+  basicstyle=\ttfamily\scriptsize,
+  frame=single, breaklines=true,
+  captionpos=b,
+}
+
+% ── Theorem environments ──────────────────────────────────────────────────────
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+\newtheorem{observation}{Observation}
+
+% ── Colors ───────────────────────────────────────────────────────────────────
+\definecolor{riskred}{rgb}{0.65,0.10,0.10}
+\definecolor{safegreen}{rgb}{0.08,0.47,0.16}
+\definecolor{warnorng}{rgb}{0.78,0.39,0.0}
+
+% ── Macros ───────────────────────────────────────────────────────────────────
+\newcommand{\sysname}{\textsc{CapMismatch}\xspace}
+\newcommand{\cape}{\textsc{CAPE}\xspace}
+\newcommand{\clawhub}{\textsc{ClawHub}\xspace}
+\newcommand{\lscps}{\textsc{LSCPS}\xspace}
+\newcommand{\eg}{\textit{e.g.,}\xspace}
+\newcommand{\ie}{\textit{i.e.,}\xspace}
+\newcommand{\etal}{\textit{et al.}\xspace}
+\newcommand{\cf}{\textit{cf.}\xspace}
+
+% Key numbers — CAPE final results (125/125 pairs, first-pass)
+% ITT = intent-to-treat (counting 64 infrastructure timeouts as failures)
+% CR  = completed-run (conditioned on agent returning response before 175s kill)
+\newcommand{\NskillsCH}{18{,}443\xspace}
+\newcommand{\NpairsTotal}{125\xspace}
+% ITT metric (64 timeouts counted as failures)
+\newcommand{\NpairsSuccessITT}{57\xspace}
+\newcommand{\PairsSuccessRateITT}{45.6\%\xspace}
+% Completed-run metric (61 non-timeout pairs)
+\newcommand{\NpairsSuccessCR}{57\xspace}
+\newcommand{\NpairsCompletedRun}{61\xspace}
+\newcommand{\PairsSuccessRateCR}{93.4\%\xspace}
+% CI bounds
+\newcommand{\CICRlo}{84.3\%\xspace}
+\newcommand{\CICRhi}{97.4\%\xspace}
+% Shell exec
+\newcommand{\ShellSuccessRate}{100\%\xspace}  % 33/33 completed-run
+\newcommand{\NShellCompleted}{33\xspace}
+% Timeout / refusal counts
+\newcommand{\NTimeout}{64\xspace}
+\newcommand{\NRefusal}{4\xspace}
+% Measurement numbers
+\newcommand{\ICone}{75.8\%\xspace}
+\newcommand{\IConeN}{13{,}975\xspace}
+\newcommand{\MeanCR}{0.042\xspace}
+\newcommand{\MeanCDI}{0.894\xspace}
+\newcommand{\Tsixrecall}{94.1\%\xspace}
+% IAA
+\newcommand{\IAAsink}{0.87\xspace}
+\newcommand{\skillssh}{\textsc{skills.sh}\xspace}
+% ── CAPE skills.sh cross-platform validation (§6) results ─────────────────
+\newcommand{\NskillsSH}{116{,}208\xspace}      % total skills.sh corpus
+\newcommand{\NssPairs}{197\xspace}              % Codex-confirmed viable skills
+\newcommand{\NssRun}{166\xspace}               % skills executed (install ok)
+\newcommand{\NssInstallRate}{100\%\xspace}      % 166/166
+\newcommand{\NssSuccessRate}{99\%\xspace}      % 165/166
+\newcommand{\NssShellRate}{100\%\xspace}       % T06: 75/75
+\newcommand{\NssNetworkRate}{96\%\xspace}      % T07: 25/26
+\newcommand{\NssMemoryRate}{100\%\xspace}      % T13: 20/20
+\newcommand{\NssFileRate}{100\%\xspace}        % T02: 23/23
+\newcommand{\NssPersistRate}{100\%\xspace}     % T05: 9/9
+% ── ITT/CR rate macros (used in introduction) ──────────────────────────────
+\newcommand{\ITTrate}{45.6\xspace}
+\newcommand{\ITTlo}{35.3\xspace}
+\newcommand{\ITThi}{56.3\xspace}
+\newcommand{\CRrate}{93.4\xspace}
+\newcommand{\CRlo}{84.3\xspace}
+\newcommand{\CRhi}{97.4\xspace}
+\newcommand{\NpairsCRDenom}{\NpairsCompletedRun}
+
+% ── Paper metadata ───────────────────────────────────────────────────────────
+\title{\sysname: Measuring Capability-Description Inconsistency\\
+       and Source-Sink Attack Risks in LLM Agent Skill Marketplaces}
+
+\author{Anonymous Submission}
+
+\begin{document}
+\maketitle
+
+% ============================================================
+\begin{abstract}
+% ============================================================
+LLM agent skill marketplaces—platforms where developers publish
+installable tools that extend language model capabilities—now host
+tens of thousands of skills accessed by millions of users.
+Unlike traditional software packages, skills operate with
+\emph{NLP-driven ambient authority}: their capabilities are described
+only in natural language, with no machine-enforceable permission model.
+
+We study whether these descriptions accurately reflect what skills
+actually do.
+Analyzing \NskillsCH{} skills from \clawhub, the largest public skill
+marketplace, we find that \ICone{} (\IConeN{} skills) \emph{completely omit}
+security-sensitive capabilities from their descriptions
+(mean Capability Recall \MeanCR).
+This opacity is not benign: we demonstrate that it enables a new
+class of attacks we call \emph{source-sink skill composition attacks},
+in which an attacker-poisoned source skill injects malicious instructions
+that activate an unsuspecting sink skill's dangerous, undisclosed capabilities.
+
+We implement \cape (Compositional Attack Pair Evaluator),
+an empirical validation framework that tests all \NpairsTotal{} unique
+source-sink pairs against real OpenClaw agents in isolated environments.
+We report two pre-defined metrics:
+\textbf{ITT} (intent-to-treat, counting \NTimeout{} infrastructure timeouts as failures):
+\NpairsSuccessITT/\NpairsTotal{} = \PairsSuccessRateITT;
+\textbf{completed-run} (conditioned on agent returning a response):
+\NpairsSuccessCR/\NpairsCompletedRun{} = \textbf{\PairsSuccessRateCR}
+(95\% CI: \CICRlo--\CICRhi).
+Side effects include shell command execution, file deletion,
+cron backdoor installation, and process termination.
+Sink skills with shell-execution capabilities are exploited at
+\ShellSuccessRate{} completed-run success rate (\NShellCompleted/\NShellCompleted{} pairs).
+Only \NRefusal{} of \NpairsTotal{} pairs (3.2\%) produce explicit agent refusals;
+the agent's safety policy is heuristic-based and stochastically applied.
+A cross-platform live-execution replication on \NssPairs{} \skillssh{} skills
+using the \texttt{codex} agent confirms the finding:
+\NssSuccessRate{} attack success rate across all five sink channel types
+(shell: \NssShellRate{}, memory: \NssMemoryRate{}, persistence: \NssPersistRate{}),
+with \NssInstallRate{} install success rate and zero platform-level safety gates triggered.
+Our temporal analysis of skill updates finds that dangerous capabilities
+are frequently introduced silently, evading both users and platform scanners.
+We release our dataset, tooling, and the \sysname detection pipeline.
+\end{abstract}
+
+% ============================================================
+\section{Introduction}
+\label{sec:intro}
+% ============================================================
+
+\input{sections/ndss_01_introduction}
+
+% ============================================================
+\section{Background and Threat Model}
+\label{sec:background}
+% ============================================================
+
+\input{sections/ndss_02_background}
+
+% ============================================================
+\section{Capability-Description Inconsistency}
+\label{sec:taxonomy}
+% ============================================================
+
+\input{sections/ndss_03_taxonomy}
+
+% ============================================================
+\section{Measurement Study}
+\label{sec:measurement}
+% ============================================================
+
+\input{sections/ndss_04_measurement}
+
+% ============================================================
+\section{Source-Sink Attack Validation (CAPE)}
+\label{sec:cape}
+% ============================================================
+
+\input{sections/ndss_05_cape}
+
+% ============================================================
+\section{Cross-Platform Validation}
+\label{sec:crossplatform}
+% ============================================================
+
+\input{sections/ndss_06_temporal}
+
+% ============================================================
+\section{Discussion}
+\label{sec:discussion}
+% ============================================================
+
+\input{sections/ndss_07_discussion}
+
+% ============================================================
+\section{Related Work}
+\label{sec:related}
+% ============================================================
+
+\input{sections/ndss_08_related}
+
+% ============================================================
+\section{Conclusion}
+\label{sec:conclusion}
+% ============================================================
+
+\input{sections/ndss_09_conclusion}
+
+\balance
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}

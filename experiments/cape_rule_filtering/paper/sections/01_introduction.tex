@@ -1,0 +1,137 @@
+% sections/01_introduction.tex --- SkillStrike
+
+The rise of LLM agent \emph{skill marketplaces}---platforms such as
+\clawhub (\NskillsCH{} skills, $>$2.1M installs) and \skillssh{}
+(\NskillsSH{} skills)---has transformed language model assistants into
+autonomous agents that compose third-party plugins to perform complex tasks.
+A skill is an installable plugin that grants the agent ambient authority:
+the ability to read files, execute shell commands, access credentials,
+and make network requests, all on behalf of the user,
+within a single shared context window.
+
+Unlike traditional software stacks where each component runs in an
+isolated process with OS-enforced privilege separation~\cite{felt2011android},
+installed skills share the agent's entire execution context.
+The agent's tool dispatcher has no awareness of which skills are
+``in scope'' for a given task, and no enforcement mechanism constrains
+cross-skill information or instruction flow.
+This architectural property creates a structural security gap:
+the \emph{aggregate capability} of a set of co-installed skills
+may far exceed what any individual skill discloses,
+and no user or platform mechanism surfaces this aggregate.
+
+\paragraph{The core attack.}
+We identify and formalize \emph{skill composition attacks},
+a new class of agent supply-chain exploits.
+The attack has three structural components:
+\begin{enumerate}[leftmargin=*,topsep=2pt,itemsep=1pt]
+  \item A \textbf{source} skill---installed for a benign purpose
+    (web search, email, calendar, file reading)---serves as an
+    \emph{injection channel}: its output reaches the agent's context
+    and can carry attacker-controlled content.
+  \item A \textbf{sink} skill---also installed for a legitimate purpose
+    (development tooling, scheduler, memory manager)---possesses a
+    \emph{dangerous undisclosed capability}: shell execution, credential
+    exfiltration, boot hook injection, or persistent memory poisoning.
+    This capability is absent from the skill's public documentation.
+  \item The attacker poisons the source's output channel
+    (a search result, email, API response, shared memory entry)
+    to inject a disguised instruction that causes the agent to invoke
+    the sink's dangerous capability, producing a real system-level effect
+    without the user's knowledge or consent.
+\end{enumerate}
+
+Critically, \textbf{neither skill need be individually malicious}.
+The attack surface arises from their composition in a shared context.
+A user who audits each installed skill in isolation cannot detect
+the risk, because no individual skill is performing anything unexpected---
+the dangerous action emerges from the interaction between them.
+
+\paragraph{Why skill composition attacks are structurally distinct from prompt injection.}
+Prompt injection~\cite{greshake2023indirect,perez2022ignore} exploits the
+model's inability to distinguish user instructions from data content.
+A reviewer may ask: is a skill composition attack simply
+\emph{``indirect prompt injection via tool output''}
+(\\ie~\cite{zhan2024injecagent})?
+We argue not, and state this precisely:
+
+\begin{proposition}[Defense Separation]
+\label{prop:separation}
+Let $\mathcal{D}_{\rm PI}$ be any defense against indirect prompt injection
+that operates by (a) filtering/labeling untrusted tokens before LLM processing,
+(b) restricting which tokens can contain instructions, or
+(c) sandboxing the attacker's injection channel.
+Then $\mathcal{D}_{\rm PI}$ cannot prevent skill composition attacks
+in any standard MCP-compatible agent, because:
+(1) The composition attack payload travels through a \emph{trusted tool-output channel}
+(a registered, installed skill's tool call result),
+which $\mathcal{D}_{\rm PI}$ must exempt to preserve normal agent functionality;
+(2) The dangerous tool call it triggers is a \emph{legitimate invocation}
+of the sink skill's declared API---the LLM is performing no unexpected action;
+(3) Blocking requires reasoning about \emph{cross-skill capability combination},
+not about token-level trust---requiring a defense at the ecosystem layer,
+not the input-processing layer.
+\end{proposition}
+
+\noindent
+This differs from tool-output injection~\cite{zhan2024injecagent} in a critical way:
+prior tool-output injection works treat the \emph{single tool's behavior} as the attack surface.
+Skill composition attacks treat the \emph{interaction between two or more tools}
+as the attack surface---a surface that does not exist in any single skill's schema
+and cannot be detected by per-tool analysis.
+The attack class is therefore not a special case of prompt injection;
+it requires a distinct remediation model (capability isolation, \S\ref{sec:discussion}).
+
+\paragraph{Contributions.}
+We make four contributions:
+
+\begin{enumerate}[leftmargin=*, label=\textbf{C\arabic*.},topsep=2pt]
+
+\item \textbf{Attack formalization and taxonomy (\S\ref{sec:background}, \S\ref{sec:static}).}
+We define the \emph{Source-Sink Composition Attack} model,
+introduce a taxonomy of five sink capability families and five source injection
+channels applicable across skill marketplaces,
+and prove that the attack surface is $O(|S_{\rm src}| \times |S_{\rm sink}|)$
+in the marketplace size.
+
+\item \textbf{Static attack surface discovery (\S\ref{sec:static}).}
+\lscps (Layered Structured Capability Pattern Search) combines
+\NpatternsLSCPS{}+ regex patterns organized into 14 capability families
+to identify dangerous source-sink pairs at publish time.
+Applied to \NskillsCH{} \clawhub skills, \lscps identifies
+\NsinkCH{} dangerous sink skills (K1--K5, 25.5\% of corpus)
+and \NsrcCH{} source skills (C1--C5, 83\%),
+yielding a theoretical attack surface of $\NsrcCH \times \NsinkCH \approx 71.9\mathrm{M}$ skill combinations.
+
+\item \textbf{LLM semantic verification (\S\ref{sec:llm}).}
+Applied to the \skillssh{} corpus (\NskillsSH{} skills) as a second validation corpus,
+a two-stage Codex chain-of-thought audit confirms \NcodexConfirm{} exploitable paths
+from \NselfExfil{} LSCPS candidates---a
+$>$21$\times$ precision improvement over static analysis alone.
+
+\item \textbf{Empirical validation on two live platforms (\S\ref{sec:eval_ch}, \S\ref{sec:eval_ss}).}
+We execute \sysname attacks on two distinct, independent platforms
+using real agent infrastructure (OpenClaw and Codex).
+On \clawhub: \NpairsCHshell/\NpairsCHshell{} shell-execution pairs succeed
+(\PairsCHshellRate), and \NpairsCHConeok/\NpairsCHCone{} LLM-context injection
+pairs succeed (\PairsCHConeRate).
+On \skillssh: \NpairsSSsuccess/\NpairsSSlaunched{} pairs succeed
+(\PairsSSrate) across all five sink families,
+with zero install-time safety gates triggered.
+
+\end{enumerate}
+
+\paragraph{Ethical considerations.}
+All experiments ran in fully isolated sandbox environments with no impact on
+real users, external services, or production skill marketplaces.
+Skill identifiers used for reproducibility are real marketplace names;
+no weaponized payloads are released.
+We have notified both ClawHub and the skills.sh maintainers.
+
+\paragraph{Paper organization.}
+\S\ref{sec:background} defines the threat model.
+\S\ref{sec:static} describes static discovery.
+\S\ref{sec:llm} presents LLM verification.
+\S\ref{sec:eval_ch} and \S\ref{sec:eval_ss} report empirical results.
+\S\ref{sec:discussion} discusses defenses and limitations.
+\S\ref{sec:related} situates our work.

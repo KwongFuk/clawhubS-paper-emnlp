@@ -1,0 +1,204 @@
+% sections/02_background.tex
+
+\section{Background \& Threat Model}
+\label{sec:background}
+
+\subsection{LLM Skill Marketplaces}
+
+LLM skill marketplaces are application stores specialized for language
+model extensions. A \emph{skill} is a self-contained module---typically a
+\texttt{SKILL.md} manifest with tool definitions and helper code---that an
+LLM agent invokes during conversation or automated tasks.
+Skills may be first-party (platform-developed) or third-party.
+
+Users install skills through a package-manager command
+(\eg \texttt{/install author/skill-name}) and thereafter the skill
+executes with \emph{ambient authority}: persistent access to the
+agent's context window, conversation history, tools, and any connected
+data sources (filesystem, email, calendar, credentials).
+
+\paragraph{Trust signals.}
+Platforms expose signals intended to help users evaluate skills:
+\begin{enumerate}
+    \item A free-text \textbf{description} written by the developer;
+    \item Optional structured \textbf{metadata} (YAML declarations of capability);
+    \item Version \textbf{changelogs};
+    \item A platform-operated \textbf{security scan badge};
+    \item Aggregate \textbf{download and star counts}.
+\end{enumerate}
+Our analysis suggests that signals 1--4 often understate actual capabilities, while signal 5 may amplify misplaced trust in risky skills.
+
+\paragraph{Auto-update semantics.}
+Both \clawhub{} and \skillssh{} propagate version updates automatically
+to all installed users by default.
+Users who consented to a skill at version $v_i$ are silently upgraded to
+$v_{i+1}$ without re-review, re-consent, or changelog notification.
+ClawHub's platform documentation confirms that updates propagate within
+24~hours of publisher push.
+Version pinning is unavailable to standard users; skill developers have
+unilateral write access to all installed instances.
+This is the key structural enabler of T4 and T6 attacks.
+
+\subsection{Threat Model}
+
+We model four principals:
+
+\textbf{Users} install skills expecting them to behave as described.
+They cannot audit code before installation and rely on platform trust signals.
+
+\textbf{Benign (careless) developers} omit capability documentation
+without malicious intent (T1, T4). Their omissions violate informed consent.
+
+\textbf{Deceptive developers} consciously misstate capabilities to
+increase installs or bypass platform review (T2, T3, T5).
+
+\textbf{Malicious actors} (compromised accounts or supply-chain
+attackers) deliberately inject harmful code into skills (T6).
+
+\paragraph{Attack surface.}
+The core vulnerability is \emph{consent at installation vs.\ capability
+at runtime}. Users who consented to a ``calendar scheduler'' have not
+consented to credential exfiltration---even if that capability is
+in the installed code. This gap is structurally analogous to Android
+permission creep~\cite{felt2011android} but operates at the description
+level rather than the manifest level: Android \emph{requires} capability
+declarations; skill platforms do not.
+
+\paragraph{Attacker goal.}
+A T6 attacker seeks to: (a) establish trust via a benign skill version,
+accumulate installs, then (b) inject malicious capability via an update,
+exploiting auto-update propagation, then (c) exfiltrate credentials/data
+before the malicious version is detected and patched.
+The expected harm is proportional to the install count and the exposure
+window---both of which grow as the platform grows.
+
+\paragraph{Why undisclosure is the attacker's rational strategy.}
+A reviewer may ask why attackers do not use more sophisticated obfuscation
+(runtime payload fetching, dynamic code generation, indirect API calls).
+We observe that simple undisclosure is the \emph{risk-minimal} approach:
+complexity increases the probability of detection by
+pattern matching, sandbox execution, or anomaly scoring.
+T6 evidence supports this: 32/34 confirmed T6 skills use
+straightforward API-level patterns---\texttt{os.environ}~(CRED\_READ),
+\texttt{requests.post}~(NET\_WRITE), \texttt{os.remove}~(FILE\_DELETE)---
+without obfuscation. The marginally harder bar of tool-level
+undisclosure is sufficient because platform scanners check
+\emph{declared intent} (descriptions and metadata), not runtime capability.
+
+\paragraph{Consent model scope.}
+We do \emph{not} claim that users systematically read skill descriptions
+or form complete capability expectations from them.
+Rather, we note that descriptions are the \emph{only structured,
+publish-time mechanism} for capability disclosure available to users across
+both platforms we studied (YAML metadata fill rate: 0.0\%;
+\S\ref{sec:static}).
+When this mechanism fails systematically at scale, users and platform
+operators have no alternative disclosure channel---regardless of
+whether individual users attend to descriptions.
+The threat is structural, not behavioral.
+
+\subsection{LSCPS Capability Taxonomy}
+
+We categorize skill capabilities into five top-level families,
+abbreviated \textbf{\lscps{}}
+(\underline{L}ocal-shell, \underline{S}ecret, \underline{C}ommand-and-control,
+\underline{P}ersistent-write, \underline{S}ystemic-autonomous).
+Each top-level family is subdivided into 14 fine-grained sub-categories
+that serve as the atomic detection units (see Appendix~\ref{app:lscps}):
+
+\begin{itemize}[topsep=2pt,itemsep=2pt]
+\item[\textbf{L}] \textbf{Local Shell execution}:
+  \texttt{subprocess}, \texttt{os.system}, \texttt{eval()}, bash invocation
+\item[\textbf{S}] \textbf{Secret/Credential access}:
+  API keys, OAuth tokens, passwords, private keys
+\item[\textbf{C}] \textbf{Command-and-control / Network write}:
+  \texttt{requests.post}, webhooks, SMTP exfiltration
+\item[\textbf{P}] \textbf{Persistent file write}:
+  \texttt{open(w)}, \texttt{shutil.rmtree}, \texttt{os.remove}
+\item[\textbf{S}] \textbf{Systemic/Autonomous effects}:
+  send email, create/modify files, background scheduling, multi-step no-confirm loops
+\end{itemize}
+
+Each sub-category is detected by a curated regex bank totaling 300+ patterns
+(see Appendix~\ref{app:lscps}),
+validated on the 40 T6 ground-truth version pairs
+(72.5\% pair-level high-risk recall; 79.4\% at skill level,
+\S\ref{sec:e2e}).
+
+\paragraph{Methodological rationale: Why LSCPS, not Bandit/Semgrep?}
+General-purpose security linters (Bandit, Semgrep) detect Python anti-patterns
+(SQL injection, hardcoded secrets) but are designed for \emph{single-file,
+code-centric} analysis. LSCPS differs in three concrete ways:
+
+\begin{enumerate}[topsep=2pt, itemsep=2pt]
+\item \textbf{Multi-file capability aggregation.}
+  LSCPS extracts $\mathcal{C}_{\text{act}}$ across SKILL.md manifests,
+  Python helpers, YAML configs, and JSON schemas jointly (up to 17.2 files
+  per skill on average). Bandit analyzes files independently and misses
+  exfiltration chains that span manifest + helper code.
+\item \textbf{Dual-side extraction.}
+  LSCPS extracts $\mathcal{C}_{\text{vis}}$ from \emph{natural language
+  descriptions} as well as $\mathcal{C}_{\text{act}}$ from code.
+  No general linter performs description-vs-code inconsistency comparison.
+\item \textbf{Marketplace-specific patterns.}
+  LSCPS covers 14 families including MCP permission declarations,
+  autonomous-mode signals, and SKILL.md structural cues outside general linters'
+  default rule sets. This yields $\approx$35\% added recall over Bandit
+  (high-severity) on our T6 evaluation corpus.
+\end{enumerate}
+
+Beyond these differentiators, static extraction provides three deployment advantages:
+\begin{itemize}
+    \item \textbf{Evasion resistance:} Static extraction evaluates purely
+      syntactically, unlike LLM judges which are vulnerable to adversarial
+      prompt manipulation injected into code comments.
+    \item \textbf{Deployability:} The regex-based engine executes
+      marketplace-scale scanning across tens of thousands
+      of skills in seconds with zero runtime overhead.
+    \item \textbf{High baseline recall:} Our 300+ pattern bank identifies
+      72.5\% of real-world T6 malicious pairs at the pair level,
+      compared to the platform scanner's 0\%.
+\end{itemize}
+
+\paragraph{Capability weighting.}
+For the static baseline (SCS), we assign heuristic
+severity weights to each LSCPS family as an initial
+Capability Exposure Score (CES): shell execution (3.0),
+credential transmit (3.0), credential read (2.5),
+network write (2.0), autonomous (1.5), file read (0.5).
+In \S\ref{sec:riskweights}, we replace these heuristics
+with \emph{data-driven} Risk-Weighted Mismatch (RWM) weights
+learned from T6 ground truth. The learned weights diverge
+significantly from the heuristic assignments
+(\eg shell execution drops from 3.0 to 0.10 because it is
+ubiquitous across both malicious and benign skills),
+demonstrating the necessity of empirical calibration.
+
+\subsection{Datasets}
+
+\paragraph{\clawhub{}.}
+We archived the full \clawhub{} public skill catalog in March 2026,
+capturing \NskillsCH{} skills and complete version histories.
+Of these, \textbf{\NskillsDMR{} skills} have locally archived
+\texttt{SKILL.md} text, covering \textbf{\Ntransitions{} version transition pairs}
+(on average 3.39 versions per skill).
+The 705 remaining skills were deleted from the platform before
+local archival completed.
+\textit{Deleted-skill bias note:} Because deleted skills may disproportionately
+represent platform-removed (and thus potentially higher-risk) content,
+excluding them conservatively biases our IC-1 prevalence \emph{downward}---
+our reported figures therefore underestimate the true inconsistency rate.
+
+\paragraph{\skillssh{}.}
+We archived \textbf{116,208 skills} from \skillssh{}.
+Unlike \clawhub{}, \skillssh{} does not expose
+multi-version histories in its public API, so our analysis is static-only.
+We apply the identical IC framework pipeline
+(\S\ref{sec:static}) to validate cross-platform generalizability.
+
+\paragraph{Ethical considerations.}
+All data is from public APIs at rate $\leq$ 0.5 req/s.
+We did not execute any skill, access non-public content,
+or interfere with platform operations.
+Our crawler identified itself with an academic research user agent.
+T6 case identifiers are withheld pending coordinated disclosure.

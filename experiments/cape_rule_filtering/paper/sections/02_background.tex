@@ -1,0 +1,106 @@
+% sections/02_background.tex --- SkillStrike
+
+\subsection{LLM Agent Skill Marketplaces}
+
+LLM skill marketplaces publish installable tool packages that extend
+agent capabilities via standardized protocols (primarily the
+Model Context Protocol, MCP~\cite{anthropic2024mcp}).
+Each skill is a self-contained package comprising:
+(i)~a natural-language \emph{description} (the sole capability disclosure
+mechanism visible to end users),
+(ii)~\emph{tool definitions} (structured API declarations consumed by the agent),
+and (iii)~\emph{implementation code} (executed by the agent runtime
+with the user's OS-level privileges).
+
+\paragraph{Ambient authority.}
+Once installed, a skill executes with the full privileges of the agent
+runtime---typically the user's OS account.
+There is no sandboxing, no OS-level capability restriction, and no
+per-tool-call confirmation by default.
+This \emph{ambient authority} model~\cite{ruan2024identifying}
+means that a skill's behavior is constrained only by its own code
+and the LLM's willingness to invoke its tools.
+
+\paragraph{Shared context window.}
+All installed skills share a single agent context: the LLM sees
+tool definitions and outputs from all skills simultaneously.
+When a source skill returns content (search results, emails, API responses),
+that content enters the shared context alongside the agent's system prompt
+and all other tool schemas---including those of co-installed sink skills.
+
+\subsection{Threat Model}
+\label{sec:threat_model}
+
+\paragraph{Source-Sink Model.}
+We model a skill ecosystem as a bipartite graph $G = (S_{\rm src} \cup S_{\rm sink}, E)$
+where:
+\begin{itemize}[leftmargin=*,topsep=2pt,itemsep=1pt]
+  \item $S_{\rm src}$ = \emph{source skills}: skills that fetch,
+    aggregate, or consume external content, creating an injection
+    channel into the agent context.
+  \item $S_{\rm sink}$ = \emph{sink skills}: skills possessing a
+    \emph{dangerous undisclosed capability}
+    $\kappa \in \mathcal{C}_{\rm act} \setminus \mathcal{C}_{\rm vis}$---a
+    dangerous action that is executable but absent from documentation.
+  \item $E$ contains all pairs $(s, k) \in S_{\rm src} \times S_{\rm sink}$
+    where $s$ can deliver attacker-controlled content to the agent
+    context in which $k$ is installed.
+\end{itemize}
+
+\begin{definition}[Skill Composition Attack]
+Given an agent session $\mathcal{A}$ with co-installed source skill
+$s \in S_{\rm src}$ and sink skill $k \in S_{\rm sink}$,
+an attacker who can influence content delivered through $s$'s output channel
+constructs content $c$ such that $\mathcal{A}$'s processing of $c$
+invokes $\kappa \in \mathcal{C}_{\rm act,k} \setminus \mathcal{C}_{\rm vis,k}$
+without explicit user authorization,
+producing a verifiable system-level effect.
+\end{definition}
+
+\paragraph{Sink capability families.}
+We define five sink capability families:
+\textbf{K1} Shell execution: arbitrary command execution via
+\texttt{exec}, \texttt{popen}, \texttt{subprocess};
+\textbf{K2} Filesystem: credential deletion, file overwrite, directory traversal;
+\textbf{K3} Network exfiltration: outbound HTTP/WebSocket data exfil,
+webhook triggering;
+\textbf{K4} Agent memory: cross-session memory write, context poisoning;
+\textbf{K5} Persistence: boot hook injection, cron/service installation.
+
+\paragraph{Source injection channels.}
+We define five source injection channels:
+\textbf{C1} LLM context: web search, browser automation, news fetch,
+API aggregation---content enters the shared context directly;
+\textbf{C2} Filesystem: file read operations feeding the context;
+\textbf{C3} Agent memory: cross-session memory read channels;
+\textbf{C4} Network: outbound-then-inbound API patterns;
+\textbf{C5} Persistence: boot hooks and scheduled tasks.
+
+\paragraph{Principals and assumptions.}
+Three principals: (1)~the \emph{user}, who installs skills for legitimate purposes;
+(2)~the \emph{skill developer}, who publishes skills (possibly with hidden capabilities);
+(3)~the \emph{attacker}, who controls content reachable via a source skill's channel.
+The attacker does \emph{not} need: access to the user's machine,
+the ability to modify installed skills, or OS-level privileges.
+The attack requires only the ability to place content where the source
+skill's fetch operation will retrieve it---a search engine result,
+an email in a monitored inbox, an API response from a compromised endpoint.
+
+\paragraph{Why descriptions are the only defense.}
+Unlike Android (capability permission manifests~\cite{felt2011android}),
+npm (dependency audit~\cite{synk2023report}), or browser extensions
+(sandboxed JavaScript APIs), LLM skill marketplaces have
+no machine-enforceable capability permission model.
+Natural-language descriptions are therefore the sole mechanism
+for users to understand what a skill can do---and the attacker's
+advantage is that dangerous capabilities can be implemented
+without being disclosed in this description.
+We define the \emph{dangerous capability gap} as
+$\Delta\kappa = \mathcal{C}_{\rm act} \setminus \mathcal{C}_{\rm vis}$;
+the composition attack is enabled whenever $\Delta\kappa_k \neq \varnothing$
+for a co-installed sink skill $k$.
+
+\paragraph{Out of scope.}
+Direct UI-level social engineering, OS privilege escalation
+beyond the agent runtime's account, or attacks on marketplace
+platform infrastructure itself.

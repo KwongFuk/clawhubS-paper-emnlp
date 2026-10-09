@@ -1,0 +1,73 @@
+% sections/ndss_07_discussion.tex  — NDSS 2027
+
+\subsection{Limitations}
+
+\paragraph{LSCPS as lower bound.}
+Our rule-based capability extraction (\lscps) is a conservative
+precision-recall tradeoff: it minimizes false positives at the cost
+of missing obfuscated or dynamically-constructed dangerous calls.
+Reported IC rates are therefore \emph{lower bounds} on true inconsistency.
+CR = \MeanCR is an \emph{upper bound} on true disclosure rates.
+LLM-based semantic adjudication (deferred to future work)
+would expand detection coverage.
+
+\paragraph{CAPE framework limitations.}
+Of 85 pairs attempted at submission, 24 timed out under our pre-registered
+175\,s hard-kill policy (LLM context compaction at high token usage).
+We report both ITT (67.1\%) and completed-run (93.4\%) metrics side-by-side.
+Controls and P2/P3 payload validations are 20-pair and 8-pair spot-checks;
+expanding these to the full 125 pairs would further strengthen the causal claim.
+We have not exhaustively tested all possible injection phrasings;
+adversarial rephrasing likely increases the success rate further.
+
+\paragraph{Single platform.}
+Our measurement covers \clawhub and skills.sh only.
+Other agent platforms (Cursor, Continue.dev, Claude Computer Use)
+may have different transparency practices.
+Cross-platform validation of skill.sh (90.9\% inconsistency)
+suggests the finding generalizes.
+
+\paragraph{Temporal snapshot.}
+The ClawHub dataset reflects March 2026.
+Skill descriptions may improve over time, though our temporal
+analysis (\S\ref{sec:temporal}) shows the trend is toward
+capability accretion without description update.
+
+\subsection{Defenses}
+
+\paragraph{Capability manifests.}
+Marketplace platforms should require machine-readable capability
+declarations (analogous to Android permissions) listing:
+file-system access scope, network destinations, shell invocation flags,
+credential access, and external API calls.
+Our \lscps taxonomy provides a starting point for this schema.
+
+\paragraph{Publish-time screening.}
+Our \sysname pipeline can run at publish time to flag skills with
+CR below a threshold (\eg CR $<$ 0.5), preventing the most egregious
+mismatch patterns from reaching users.
+At our measured FPR of $<$2\%, the cost is acceptable for platform operators.
+
+\paragraph{Runtime capability monitoring.}
+Agent runtimes should log and optionally confirm dangerous tool calls
+(\texttt{exec}, \texttt{write}, \texttt{delete}) even when initiated by
+installed skills, with user-visible notifications.
+Our results show the agent's current safety model is heuristic-based
+and inconsistent: shell exec is fully unguarded while obvious memory-write
+requests are refused. A consistent capability-based policy is needed.
+
+\paragraph{Trust-building attack countermeasure.}
+The session warm-up bypass (\S\ref{sec:cape}) suggests that
+agent safety policies should not rely on conversational trust context.
+Capability whitelists established at skill-install time---not inferred
+from session history---would prevent this bypass.
+
+\subsection{Broader Implications}
+
+The IC-1 finding (\ICone of dangerous skills omit capabilities) implies
+that LLM agent marketplaces are currently operating on an \emph{honor system}
+for capability disclosure.
+As agent capabilities grow---computer use, multi-agent orchestration,
+financial autonomy---the consequences of this trust gap compound.
+Our work provides both the measurement evidence and the attack validation
+needed to motivate platform-level policy change.

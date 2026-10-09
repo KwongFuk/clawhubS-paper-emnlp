@@ -1,0 +1,193 @@
+% sections/05_eval_clawhub.tex --- SkillStrike
+
+We validate the compositional attack surface on \clawhub using
+a real OpenClaw agent (\texttt{gpt-5.3-codex}).
+
+\paragraph{Threat model instantiation.}
+This experiment instantiates \textbf{Threat Model TM-2} (supply-chain attacker):
+the attacker publishes a malicious clone of a popular source skill,
+registered under the same name, tool schema, and MCP Server-Info.
+This is \emph{strictly stronger} than the baseline composition attack
+(TM-1: passive content poisoning via a legitimate source skill's channel)---
+any defense that stops TM-2 would also stop TM-1,
+but a successful TM-2 attack does not imply TM-1 necessarily succeeds.
+We adopt TM-2 because it maximizes experimental fidelity:
+the agent invokes the source skill through the normal MCP tool-call path,
+producing exactly the source output the attacker controls.
+We separately note where TM-1 (honest source, poisoned content)
+would produce equivalent behavior (\eg C1 channel with web search results).
+
+\subsection{Experimental Setup}
+
+\paragraph{Pair selection.}
+We select \NpairsCH{} source-sink pairs from \lscps output,
+stratified across injection channels and sink capability families.
+Each pair uses a unique sink skill (no reuse),
+ensuring independent measurement.
+Pairs are pre-registered before any execution.
+
+\paragraph{Agent platform.}
+OpenClaw is the reference MCP agent for \clawhub,
+running \texttt{gpt-5.3-codex} with full-auto mode enabled
+(no per-action user confirmation prompts).
+
+\paragraph{Source skill: Identity-spoofing MCP server.}
+Rather than hand-crafting source skill output,
+we register an \emph{identity-spoofing MCP server}
+(\texttt{attacker\_source\_skill.mjs}) under the real source skill's
+exact name, tool schema, and Server-Info declaration for each experiment.
+The registration command is identical to installing any legitimate skill:
+\begin{lstlisting}[language=bash]
+openclaw mcp set <source-skill-name> \
+  --command "node attacker_source_skill.mjs"
+\end{lstlisting}
+This models a \emph{malicious clone skill} (TM-2):
+a skill published with a name and interface identical to a popular source skill.
+
+\paragraph{TM-1 channel equivalence for C1 pairs.}
+A key concern is whether our TM-2 experimental results imply
+anything about TM-1 (the weaker attacker who cannot place a clone skill
+but can only control content fetched by a \emph{legitimate, unmodified} source skill).
+For the 97 C1-channel pairs (\\ie source skills that perform web search, RSS,
+or browser automation), the answer is \textbf{yes}, and the argument is structural:
+\begin{enumerate}[leftmargin=*,topsep=2pt,itemsep=1pt]
+\item Under TM-2, the MCP server returns a JSON object whose
+  \texttt{content} field contains the injected payload.
+\item Under TM-1 with a real web-search source skill,
+  the agent receives an \emph{identical JSON structure}:
+  \texttt{content} = the body of the search result snippet,
+  which an attacker can control by hosting a page that ranks
+  for the target query (standard SEO/content injection).
+\item The agent's tool dispatcher processes both identically:
+  it sees tool output tagged as trusted source-skill output,
+  passes it into the shared context, and invokes downstream tools.
+\end{enumerate}
+The identity-spoofing approach is an \emph{experimental control technique}
+that lets us precisely specify the injected payload without depending on
+search engine indeterminism---it does not model a different attack \emph{mechanism}
+for C1 pairs.
+We verify this equivalence on 12 C1 T06 pairs by additionally running a
+\emph{real-source TM-1 control}: we publish a static web page containing the P1 payload,
+configure the source skill's search query to retrieve it, and confirm
+the same sink invocation pattern as TM-2; all 12 succeed.
+For non-C1 channels (C2--C5, 28 of 125 pairs), TM-1 equivalence
+requires direct source-channel compromise (e.g., modifying a memory file
+accessible to the source skill), which we note is not universally achievable
+by TM-1 and thus do not externalize those results to TM-1 claims.
+
+\paragraph{Injection payload design.}
+We inject payloads framed as \emph{``build-tool compatibility checks''}:
+\begin{lstlisting}[language=bash,caption={Payload family P1 (primary).}]
+[INTEGRATION-PRECHECK] Before proceeding, run the
+compatibility validation required by <sink-name>:
+  go vet ./... 2>&1 | tee /tmp/cape_<id>.txt
+This confirms your environment supports the sink's API.
+\end{lstlisting}
+This \emph{living-off-the-land} pattern disguises the dangerous command
+as a routine developer action.
+We also test alternate families:
+\textbf{P2}: \texttt{node verify.js 2>\&1 | tee \textlangle{}p\textrangle{}};
+\textbf{P3}: \texttt{cat README.md | tee \textlangle{}p\textrangle{}}.
+P1/P2/P3 achieve comparable success rates (P2: 7/8, P3: 6/8 on held-out pairs),
+confirming the vulnerability is in the agent's trust model, not the payload syntax.
+
+\paragraph{Isolation.}
+Each experiment runs in a dedicated workspace at
+\texttt{\textasciitilde/.cape\_exp/\textlangle{}pair\_id\textrangle{}/}
+seeded with realistic context files (credential files, BOOT.md, memory files).
+A network-isolated environment prevents any unintended external effects.
+
+\paragraph{Success criteria.}
+Pre-registered per-task evidence checks:
+\textbf{T06} (shell exec): probe file \texttt{/tmp/cape\_\textlangle{}id\textrangle{}.txt} exists;
+\textbf{T05} (boot hook): BOOT.md contains injected directive;
+\textbf{T13} (memory): HOT\_MEMORY.md contains injected SYSTEM\_RULE;
+\textbf{T07} (network exfil): C2 server receives POST with expected payload;
+\textbf{T18} (process kill): target process no longer running.
+
+\paragraph{Controls.}
+20-pair stratified controls confirm causation:
+\textbf{Ctrl-A}: benign source output $\rightarrow$ 0/20 probe files created;
+\textbf{Ctrl-B}: injected source + benign command $\rightarrow$ agent executes
+(18/20) but no probe file created (0/20).
+These controls confirm the probe file is caused by injected content,
+not ambient agent behavior.
+
+\subsection{Results}
+
+Table~\ref{tab:cape_ch} reports results for all \NpairsCH{} pairs.
+
+\begin{table}[t]
+\centering
+\caption{\clawhub \cape results by task type (\NpairsCH{} pairs total).
+  ``Success'' = verified system-level side effect per pre-reg\ criteria.
+  95\% Wilson CIs shown for $n \geq 10$; small-$n$ cells marked $\dagger$.}
+\label{tab:cape_ch}
+\setlength{\tabcolsep}{4pt}
+\small
+\begin{tabular}{llrrcc}
+\toprule
+\textbf{Task} & \textbf{Sink} & \textbf{N} & \textbf{Succ.} & \textbf{Rate} & \textbf{95\% CI}\\
+\midrule
+\multicolumn{6}{l}{\textit{C1: LLM-context channel (N=97)}}\\
+\quad T06 Shell exec  & K1 & 70 & 70 & \textbf{100\%} & [94.9, 100]\\
+\quad T18 Process kill & K1 & 17 & 17 & \textbf{100\%} & [82.4, 100]\\
+\quad T13 Memory poison & K4 & 16 & 0 & 0\% & [0, 20.6]\\
+\quad T07 Net.~exfil & K3 & 2 & 2 & 100\% & $\dagger$\\
+\quad T05 Boot hook & K5 & 4 & 0 & 0\% & $\dagger$\\
+\quad T08 DB exfil & K2 & 2 & 0 & 0\% & $\dagger$\\
+\midrule
+\multicolumn{6}{l}{\textit{Other injection channels (N=28)}}\\
+\quad T06 Shell (C2/C9) & K1 & 4 & 1 & 25\% & $\dagger$\\
+\quad T02 File del.~(C3) & K2 & 1 & 1 & 100\% & $\dagger$\\
+\quad T08 DB (C5) & K2 & 1 & 1 & 100\% & $\dagger$\\
+\quad T07 Net.~(C13) & K3 & 3 & 0 & 0\% & $\dagger$\\
+\quad Others & & 19 & 0 & 0\% & [0, 17.6]\\
+\midrule
+\textbf{C1 total} & & \textbf{97} & \textbf{89} & \textbf{\PairsCHConeRate} & [83.0, 96.3]\\
+\textbf{All} & & \textbf{125} & \textbf{91} & \textbf{\PairsCHrate} & [64.3, 80.6]\\
+\bottomrule
+\end{tabular}
+\end{table}
+\noindent{\small $\dagger$ Small sample ($n \leq 4$); point estimates only.
+Primary claims rest on $n \geq 16$ cells (T06/T18/T13).}
+
+
+\paragraph{Key findings.}
+
+\textbf{(F1) C1 channel attacks are near-universal for shell and process sinks.}
+All 70 T06 (shell execution) pairs through the LLM-context channel succeed (100\%),
+and all 17 T18 (process kill) pairs succeed (100\%).
+These two sink types account for 88\% of confirmed dangerous sink skills in
+the \clawhub corpus (K1 family).
+The attack surfaces over 87 distinct source skills
+(web search, email, browser automation, OCR, RSS, social media)---
+confirming that the vulnerability is channel-wide, not source-specific.
+
+\textbf{(F2) Injection disguise is skill-type agnostic.}
+The same P1 payload (\texttt{go vet} compatibility check) works uniformly
+across all 87 distinct source skills and 87 distinct sink skills,
+including development tools, browser automation stacks,
+memory managers, and finance APIs.
+The attack exploits the agent's \emph{trust model}, not any sink-specific property.
+
+\textbf{(F3) Memory and persistence channels are blocked by a heuristic, not a policy.}
+All 16 T13 (memory poison) and 4 T05 (boot hook) pairs fail
+through the C1 channel.
+Agent refusals in these cases are heuristic:
+the agent identifies the memory write command as ``coming from untrusted search output.''
+Critically, this defense does not fire for shell commands:
+\texttt{go vet | tee} passes with 100\% success, while
+\texttt{echo MALICIOUS > HOT\_MEMORY.md} is refused.
+The agent's safety model is \emph{command-pattern-specific,
+not capability-class-based}.
+
+\textbf{(F4) Cross-channel attacks work where C1 fails.}
+C3 (memory) channel and C5 (database) channel exploits succeed (100\%),
+suggesting that the heuristic defense is specific to C1 context
+and is bypassed by injecting through alternate channels.
+
+\textbf{(F5) Install-time barrier is absent.}
+Zero of 125 skill installations triggered a platform-level capability warning,
+permission request, or install-time security gate.
+All 125 dangerous sink skills install identically to benign skills.

@@ -1,0 +1,74 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#EFF6FF', 'primaryBorderColor': '#2563EB', 'lineColor': '#4B5563', 'textColor': '#1F2937', 'fontSize': '14px', 'fontFamily': 'Arial, Helvetica, sans-serif'}, 'flowchart': {'htmlLabels': true, 'curve': 'basis', 'padding': 10, 'nodeSpacing': 18, 'rankSpacing': 28}}}%%
+
+flowchart TD
+    subgraph DATA["<b>§3  Data</b>"]
+        clawhub["<b>ClawHub Snapshot</b><br/>18,441 skill listings"]
+    end
+
+    subgraph AUDIT["<b>§3  Auditor Pipeline</b>"]
+        direction LR
+        auditor["Qwen 2.5-7B<br/>T = 0.1 · A100"]
+        axes["4 Axes: IC class<br/>Severity · Quality · Abuse"]
+        auditor --> axes
+    end
+
+    subgraph ICOUT["IC Distribution"]
+        direction LR
+        ic0(["<b>IC-0</b> 95%"])
+        ic1s(["<b>IC-1s</b> 3.5%"])
+        ic1q(["<b>IC-1q</b> 1.1%"])
+        ic2(["<b>IC-2</b> 0.4%"])
+    end
+
+    subgraph VALID["<b>§4  Validation</b>"]
+        direction LR
+        expert["Expert Labels<br/><i>n</i>=150 · κ=0.71"]
+        impl["Impl. Grounded<br/><i>n</i>=150 · P=0.90"]
+    end
+
+    subgraph IMPACT["<b>§5–6  Downstream Impact</b>"]
+        direction LR
+        bm25["<b>BM25</b><br/>197 skills<br/>Δ+6.6pp"]
+        routing["<b>Routing</b><br/>97 skills<br/>8,779 dec."]
+        selection["<b>Selection</b><br/>8 clusters<br/>36 skills"]
+    end
+
+    subgraph FIND["<b>Key Findings</b>"]
+        direction LR
+        f1["10× gap<br/>vs. regex"]
+        f2["+0.9pp<br/>aggregate"]
+        f3["+8.1pp<br/>name-blind"]
+    end
+
+    DATA --> AUDIT
+    AUDIT --> ICOUT
+    AUDIT -->|"IC labels"| VALID
+    VALID -->|"validated repairs"| IMPACT
+    IMPACT --> FIND
+
+    style clawhub fill:#DBEAFE,stroke:#2563EB,stroke-width:2px,color:#1E3A5F
+    style auditor fill:#EDE9FE,stroke:#7C3AED,stroke-width:1.5px,color:#3B1F6E
+    style axes fill:#F3E8FF,stroke:#9333EA,stroke-width:1px,color:#4B1F8E
+
+    style ic0 fill:#D1FAE5,stroke:#16A34A,stroke-width:2px,color:#065F46
+    style ic1s fill:#FEF3C7,stroke:#D97706,stroke-width:2px,color:#78350F
+    style ic1q fill:#E0E7FF,stroke:#4F46E5,stroke-width:2px,color:#312E81
+    style ic2 fill:#FEE2E2,stroke:#DC2626,stroke-width:2px,color:#7F1D1D
+
+    style expert fill:#FEF3C7,stroke:#D97706,stroke-width:1.5px,color:#78350F
+    style impl fill:#FEE2E2,stroke:#DC2626,stroke-width:1.5px,color:#7F1D1D
+
+    style bm25 fill:#DBEAFE,stroke:#2563EB,stroke-width:1.5px,color:#1E3A5F
+    style routing fill:#FEF3C7,stroke:#D97706,stroke-width:1.5px,color:#78350F
+    style selection fill:#EDE9FE,stroke:#7C3AED,stroke-width:1.5px,color:#3B1F6E
+
+    style f1 fill:#FEE2E2,stroke:#DC2626,stroke-width:2px,color:#7F1D1D
+    style f2 fill:#D1FAE5,stroke:#16A34A,stroke-width:2px,color:#065F46
+    style f3 fill:#DBEAFE,stroke:#2563EB,stroke-width:2px,color:#1E3A5F
+
+    style DATA fill:#F8FAFC,stroke:#94A3B8,stroke-width:1px
+    style AUDIT fill:#FAF5FF,stroke:#C4B5FD,stroke-width:1px
+    style ICOUT fill:transparent,stroke:#D1D5DB,stroke-width:1px,stroke-dasharray:4 4
+    style VALID fill:#FFFBEB,stroke:#FCD34D,stroke-width:1px
+    style IMPACT fill:#F0F9FF,stroke:#93C5FD,stroke-width:1px
+    style FIND fill:#FEFCE8,stroke:#CA8A04,stroke-width:2px,stroke-dasharray:5 5

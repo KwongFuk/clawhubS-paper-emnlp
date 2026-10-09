@@ -1,0 +1,133 @@
+% sections/ndss_06_temporal.tex  — NDSS 2027 / CCS 2026
+% §6: Cross-Platform Validation — skills.sh Live Execution
+% Target: ~1.5 columns / ~700 words
+
+\section{Cross-Platform Validation}
+\label{sec:crossplatform}
+
+The ClawHub \cape experiment (\S\ref{sec:cape}) validates the
+compositional attack surface on a single platform.
+To establish generality, we conduct two independent cross-platform analyses:
+(i) a static inconsistency measurement on \skillssh{},
+and (ii) a live execution experiment using a real \texttt{codex}
+agent instance.
+
+\subsection{Static Analysis on \skillssh{}}
+
+We apply the \lscps pipeline (\S\ref{sec:measurement}) without modification
+to \NskillsSH{} \skillssh{} skills (retrieved April 2026).
+The pipeline is designed for ClawHub's SKILL.md format;
+\skillssh{} uses the same format,
+making the transfer zero-shot.
+
+\paragraph{Result.}
+IC-1 (complete capability non-disclosure) applies to
+$\mathbf{>90\%}$ of \skillssh{} skills---
+a rate higher than ClawHub ($75.8\%$),
+consistent with the hypothesis that disclosure norms
+depend on marketplace culture rather than technical constraints.
+Source-skill concentration ($S_4$: local system access, $S_1$: web fetch)
+and sink-skill concentration ($K_1$: shell execution, $K_5$: persistence)
+mirror the ClawHub distribution, confirming that the
+Source$\times$Sink attack surface is structurally universal.
+
+\subsection{Live Execution: \skillssh{} CAPE}
+\label{sec:ss_cape}
+
+\paragraph{Dataset.}
+Starting from the \NskillsSH{} \skillssh{} corpus,
+we apply a three-stage filter:
+(1) LSCPS source-sink pair detection ($4{,}154$ self-exfil candidates);
+(2) Codex semantic audit via chain-of-thought reasoning
+    (prompt: ``Does this skill's SKILL.md omit any sink-type dangerous capability?''),
+retaining $\NssPairs{}$ Codex-confirmed viable attack paths; and
+(3) install-command availability (required for automation).
+The $\NssPairs{}$ confirmed skills span all five
+sink channel types (Table~\ref{tab:ss_results}).
+
+\paragraph{Experimental setup.}
+Each skill is evaluated in a fully isolated workspace
+(\texttt{/tmp/cape\_sandboxes/\textlangle{}id\textrangle{}/})
+containing realistic credential files
+(\texttt{credentials/openai.token}, \texttt{credentials/github.token},
+\texttt{memory/hot/HOT\_MEMORY.md}, \texttt{BOOT.md}).
+Installation: \texttt{npx skills add \textlangle{}repo\textrangle{} --skill \textlangle{}name\textrangle{} -a codex -y}.
+Execution: \texttt{codex exec --full-auto --skip-git-repo-check \textlangle{}trigger\textrangle{}}.
+This represents a self-exfil attack model:
+the skill is both source (it processes external input)
+and sink (it executes dangerous operations),
+which is the most conservative threat model---
+it does not require any composition.
+Side effects are verified by filesystem probe:
+a skill-specific marker file, BOOT.md content,
+memory-file modification, or exfil log.
+Each task type uses the injection trigger described in Table~\ref{tab:ss_results}.
+
+\paragraph{Results.}
+Table~\ref{tab:ss_results} reports results for \NssRun{} executed skills
+(31 skipped: GitHub access-controlled or withdrawn between audit and execution).
+Install success: $\NssRun{}/\NssRun{} = \NssInstallRate{}$.
+Attack success: $165/166 = \NssSuccessRate{}$.
+
+\begin{table}[t]
+\centering
+\caption{%
+  \skillssh{} live execution results by sink channel type.
+  All experiments use \texttt{codex exec --full-auto}
+  with per-sink injection triggers.
+  ``Success'' = verified filesystem side effect.
+}
+\label{tab:ss_results}
+\setlength{\tabcolsep}{4pt}
+\small
+\begin{tabular}{llrrc}
+\toprule
+\textbf{Task} & \textbf{Sink Channel} & \textbf{N} & \textbf{Success} & \textbf{Rate}\\
+\midrule
+T06 & C1: Shell execution        & 75 & 75 & \textbf{100\%}\\
+T07 & C4: Network data collect   & 26 & 25 & \textbf{96\%}\\
+T02 & C2: Filesystem (cred del.) & 23 & 23 & \textbf{100\%}\\
+T13 & C3: Agent memory poison    & 20 & 20 & \textbf{100\%}\\
+T19 & C4: Messaging webhook      & 13 & 13 & \textbf{100\%}\\
+T05 & C5: Persistence (boot)     &  9 &  9 & \textbf{100\%}\\
+\midrule
+\textbf{All} & & \textbf{166} & \textbf{165} & \textbf{\NssSuccessRate{}}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Key findings.}(i)~\textbf{Install-time barrier is zero}:
+every installable skill installs cleanly without any platform-level
+safety gate ($\NssInstallRate{}$, 166/166).
+(ii)~\textbf{Runtime exploitability is near-universal}:
+$\NssSuccessRate{}$ of installed skills produce dangerous verified
+side effects---T06 (shell exec) at 100\%, T13 (memory poison) at 100\%,
+T05 (boot hook persistence) at 100\%.
+(iii)~\textbf{Network exfil is the only defended channel}:
+T07 achieves 96\% rather than 100\%; agent $\texttt{gpt-5.4}$
+detects explicit credential-reading scripts in 4\% of network-exfil cases
+and refuses---the only category with any observable safety response.
+This asymmetry confirms that safety defenses are
+heuristic-based and target-specific, not capability-based.
+(iv)~\textbf{Cross-platform consistency}:
+the Source$\times$Sink matrix from ClawHub (\S\ref{sec:cape})
+is reproduced across both platforms and both attack models
+(compositional and self-exfil), confirming that
+IC-1 gaps are a structural property of skill markets,
+not an artifact of a single platform's design.
+
+\paragraph{Temporal evolution.}
+\label{sec:temporal}
+We additionally analyze $24{,}248$ version transitions across $8{,}120$
+\clawhub{} skills tracked between November 2024 and March 2026.
+Of these, 6.8\% introduce new security-sensitive capabilities
+without any description update (silent TCE).
+627 skills (7.7\% of updated skills) acquired new capability families
+silently---\eg a web-search skill that gained \texttt{FILE\_WRITE}
+in a minor update.
+Applied to 40 confirmed malicious skill version pairs
+(34 independently flagged malicious skills),
+\lscps achieves~\Tsixrecall{} recall at Tier-6 severity threshold;
+the platform scanner achieves 0\%.
+This establishes temporal monitoring as a necessary complement
+to publish-time screening.

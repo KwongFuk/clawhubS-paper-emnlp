@@ -1,0 +1,52 @@
+% Artifact Availability
+% ACM CCS 2026 artifact availability statement
+
+We commit to making the following artifacts available for reproducibility:
+
+\begin{enumerate}[topsep=3pt,itemsep=2pt]
+\item \textbf{LSCPS Regex Pattern Bank} (300+ patterns, 14 families):
+  The complete deterministic capability extraction engine.
+  Available at: \url{[anonymized repository]}.
+
+\item \textbf{IC Classification Pipeline} (\texttt{19\_ic\_framework.py}):
+  Computes the difference matrix (AD, UD, FC, TN), derives CR, CP, CDI,
+  and assigns IC types (IC-1 through IC-4) for any skill dataset.
+
+\item \textbf{Detection Evaluation Scripts}:
+  End-to-end T6 recall evaluation and cross-platform
+  IC analysis scripts.
+
+\item \textbf{IC Classification Results}:
+  \texttt{ic\_classification.csv} (\NskillsDMR{} \clawhub{} skills with IC types, CR, CP, CDI)
+  and \texttt{ic\_crossplatform.csv} (116,208 \skillssh{} skills).
+
+\item \textbf{T6 Ground Truth Corpus}:
+  40 confirmed malicious version pairs (pseudonymized) with
+  before/after SKILL.md snapshots, remediation changelogs,
+  attack type labels (CRED\_READ, FILE\_DELETE, NET\_WRITE, etc.),
+  and corroboration source type (platform advisory / changelog / public report).
+  Inter-rater $\kappa$, rubric definition for T6 inclusion,
+  and E4 security-relevance rubric are included as supplementary documents.
+
+\item \textbf{LLM Adjudication Prototype} (\S\ref{sec:sa}):
+  Source code for the five-model ensemble adjudication prototype
+  (\mone, \mtwo, \mthree, \mfour, \mfive).
+  Full-corpus execution is deferred to future work;
+  prototype code will be released upon paper acceptance.
+
+\end{enumerate}
+
+\paragraph{Access during review.}
+All artifacts are available via an anonymized repository link
+provided in the HotCRP submission form.
+The evaluation scripts reproduce every table and figure in this paper
+directly from the derived CSV datasets, without re-running the full
+extraction pipeline on raw skill archives.
+The raw \clawhub{} and \skillssh{} skill archives are not redistributed
+due to platform terms of service,
+but all derived values needed for reproducibility are included in the CSVs.
+
+\paragraph{Post-acceptance.}
+Upon acceptance, we will publish a public artifact package on Zenodo
+with a persistent DOI, including the full LSCPS regex bank,
+evaluation scripts, and anonymized datasets.

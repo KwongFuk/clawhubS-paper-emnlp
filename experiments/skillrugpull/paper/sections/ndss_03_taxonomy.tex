@@ -1,0 +1,50 @@
+% sections/ndss_03_taxonomy.tex  — NDSS 2027 (condensed from CCS version)
+
+We formalize capability-description mismatch via a
+\emph{difference matrix} between what a skill claims ($\mathcal{C}_{\text{vis}}$)
+and what it does ($\mathcal{C}_{\text{act}}$).
+
+\paragraph{Capability sets.}
+$\mathcal{C}_{\text{vis}}(s)$ is the set of security-sensitive capability
+families mentioned in the skill's marketplace description.
+$\mathcal{C}_{\text{act}}(s)$ is the set detected by static analysis
+of the skill's implementation code (\lscps; \S\ref{sec:measurement}).
+Both sets are drawn from the same 14-family taxonomy
+(\eg \texttt{FILE\_WRITE}, \texttt{SHELL\_EXEC}, \texttt{CREDENTIAL\_ACCESS},
+\texttt{NETWORK\_EXFIL})
+derived from supply-chain attack taxonomies~\cite{ohm2020backstabber,ladisa2023taxonomy}.
+
+\paragraph{Difference matrix.}
+For each skill $s$ we compute:
+\begin{align*}
+\text{AD}&=|\mathcal{C}_{\text{act}} \cap \mathcal{C}_{\text{vis}}| &
+\text{(accurately disclosed)}\\
+\text{UD}&=|\mathcal{C}_{\text{act}} \setminus \mathcal{C}_{\text{vis}}| &
+\text{(undisclosed / hidden)}\\
+\text{FC}&=|\mathcal{C}_{\text{vis}} \setminus \mathcal{C}_{\text{act}}| &
+\text{(false claim)}
+\end{align*}
+
+\paragraph{IC taxonomy.}
+We define five inconsistency classes:
+\begin{itemize}[leftmargin=*,topsep=2pt,itemsep=1pt]
+  \item \textbf{IC-0 (Accurate):} AD$>$0, UD$=$FC$=$0. Description accurately captures capabilities.
+  \item \textbf{IC-1 (Full Omission):} UD$>$0, AD$=$FC$=$0. Dangerous capabilities completely hidden.
+  \item \textbf{IC-2 (Partial Omission):} UD$>$0, AD$>$0. Some capabilities disclosed, others hidden.
+  \item \textbf{IC-3 (False Claim):} FC$>$0, UD$=$0. Capabilities claimed but not implemented.
+  \item \textbf{IC-4 (Bidirectional):} UD$>$0, FC$>$0. Both under- and over-disclosure present.
+\end{itemize}
+
+\paragraph{Metrics.}
+We derive three scalar metrics:
+\begin{align}
+\text{CR}(s) &= \frac{\text{AD}}{\text{AD}+\text{UD}} \label{eq:cr}
+  \quad \text{(Capability Recall)}\\
+\text{CP}(s) &= \frac{\text{AD}}{\text{AD}+\text{FC}} \label{eq:cp}
+  \quad \text{(Description Precision)}\\
+\text{CDI}(s) &= \frac{\text{UD}+\text{FC}}{|\mathcal{F}|} \label{eq:cdi}
+  \quad \text{(Capability Discrepancy Index)}
+\end{align}
+
+CR$=0$ means the description mentions nothing the skill can actually do;
+CDI$=1$ means every capability family is misrepresented.

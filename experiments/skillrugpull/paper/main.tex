@@ -1,0 +1,228 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Detecting Capability-Description Mismatches in LLM Agent Ecosystems
+%% Target: ACM CCS 2026
+%%
+%% Uses official ACM acmart template (sigconf, anonymous submission)
+%% Body: ≤12 pages (excl. references & appendices)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\documentclass[sigconf,anonymous,review]{acmart}
+
+%% Disable ACM copyright/DOI/ISBN blocks for anonymous submission
+\settopmatter{printacmref=false}
+\renewcommand\footnotetextcopyrightpermission[1]{}
+\pagestyle{plain}
+
+% ── Additional packages (acmart already loads: graphicx, amsmath, amssymb,
+%    amsthm, booktabs, hyperref, natbib) ────────────────────────────────────
+\usepackage{multirow}
+\usepackage{enumitem}
+\usepackage{subcaption}
+\usepackage{xspace}
+
+% ── Listings (code blocks) ─────────────────────────────────────────────────
+\usepackage{listings}
+\lstset{
+  basicstyle   = \ttfamily\scriptsize,
+  frame        = single,
+  breaklines   = true,
+  captionpos   = b,
+  xleftmargin  = 0.5em,
+  xrightmargin = 0.5em,
+}
+% Define yaml language for listings (not built-in)
+\lstdefinelanguage{yaml}{
+  keywords={true,false,null,yes,no},
+  keywordstyle=\color{blue}\bfseries,
+  basicstyle=\ttfamily\tiny,
+  comment=[l]{\#},
+  commentstyle=\color{gray}\itshape,
+  stringstyle=\color{black},
+  morestring=[b]",
+  morestring=[b]',
+  frame=single,
+  breaklines=true,
+  showstringspaces=false,
+}
+
+% ── amsthm theorem environments (acmart uses a different default) ───────────
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+\newtheorem{proposition}{Proposition}
+\newtheorem{observation}{Observation}
+
+% ── Custom colors ──────────────────────────────────────────────────────────
+\definecolor{riskred}{rgb}{0.65,0.10,0.10}
+\definecolor{safegreen}{rgb}{0.08,0.47,0.16}
+\definecolor{warnorng}{rgb}{0.78,0.39,0.0}
+
+% ── Macros ─────────────────────────────────────────────────────────────────
+\newcommand{\Ttype}[1]{\textbf{\textcolor{riskred}{T#1}}\xspace}
+\newcommand{\sysname}{\textsc{CapMismatch}\xspace}
+\newcommand{\clawhub}{\textsc{ClawHub}\xspace}
+\newcommand{\skillssh}{\textsc{skills.sh}\xspace}
+\newcommand{\lscps}{\textsc{LSCPS}\xspace}
+\newcommand{\eg}{\textit{e.g.,}\xspace}
+\newcommand{\ie}{\textit{i.e.,}\xspace}
+\newcommand{\cf}{\textit{cf.}\xspace}
+\newcommand{\etal}{\textit{et al.}\xspace}
+
+% ── Ensemble model macros (5-model ensemble) ─────────────────────────────
+\newcommand{\mone}{Qwen3-8B\xspace}
+\newcommand{\mtwo}{Llama-3.1-8B\xspace}
+\newcommand{\mthree}{Mistral-7B-v0.3\xspace}
+\newcommand{\mfour}{Gemma-4-E4B\xspace}
+\newcommand{\mfive}{GPT-OSS-20B\xspace}
+% TBD placeholder
+\newcommand{\TBD}[1]{\colorbox{yellow}{\textbf{TBD#1}}}
+
+% ── Key number macros ──────────────────────────────────────────────────────
+\newcommand{\NskillsCH}{18{,}443\xspace}
+\newcommand{\NskillsDMR}{18{,}443\xspace}
+\newcommand{\NskillsDMRsrc}{18{,}443\xspace}
+\newcommand{\Ntransitions}{24{,}243\xspace}
+\newcommand{\NskillsSH}{116{,}208\xspace}
+\newcommand{\NskillsSSH}{\NskillsSH}
+\newcommand{\Nmalicious}{34\xspace}
+\newcommand{\Nmalpairs}{40\xspace}
+% ── Rule-based main experiment results (Script 27, April 2026) ───────────
+\newcommand{\ResultCR}{0.042\xspace}
+\newcommand{\ResultCP}{0.830\xspace}
+\newcommand{\ResultCDI}{0.894\xspace}
+\newcommand{\ResultICone}{75.8\%\xspace}
+\newcommand{\ResultICtwo}{13.6\%\xspace}
+\newcommand{\ResultFilesRead}{316{,}675\xspace}
+\newcommand{\ResultAvgFiles}{17.2\xspace}
+% ── CAPE ClawHub (§5) results ─────────────────────────────────────────────
+\newcommand{\cape}{\textsc{CAPE}\xspace}
+\newcommand{\NpairsTotal}{125\xspace}
+\newcommand{\CapeSuccessITT}{45.6\%\xspace}
+\newcommand{\CapeSuccessCR}{93.4\%\xspace}
+\newcommand{\Tsixrecall}{94.1\%\xspace}
+% ── CAPE skills.sh cross-platform validation (§6) results ─────────────────
+\newcommand{\NssPairs}{197\xspace}          % Codex-confirmed viable skills
+\newcommand{\NssRun}{166\xspace}           % skills executed (install ok)
+\newcommand{\NssInstallRate}{100\%\xspace}  % 166/166
+\newcommand{\NssSuccessRate}{99\%\xspace}  % 165/166
+\newcommand{\NssShellRate}{100\%\xspace}   % T06: 75/75
+\newcommand{\NssNetworkRate}{96\%\xspace}  % T07: 25/26
+\newcommand{\NssMemoryRate}{100\%\xspace}  % T13: 20/20
+\newcommand{\NssFileRate}{100\%\xspace}    % T02: 23/23
+\newcommand{\NssPersistRate}{100\%\xspace} % T05: 9/9
+
+% ── Compact lists ──────────────────────────────────────────────────────────
+\setlist{nosep, leftmargin=1.2em}
+
+% ── Overfull hbox prevention ───────────────────────────────────────────────
+\emergencystretch=2em
+\hfuzz=2pt
+\tolerance=1500
+\sloppy
+
+% ── ACM Conference Metadata ────────────────────────────────────────────────
+\acmConference[CCS '26]{ACM Conference on Computer and Communications Security}{October 2026}{Salt Lake City, UT, USA}
+\acmYear{2026}
+\acmISBN{}
+\acmDOI{}
+
+%===============================================================================
+\begin{document}
+%===============================================================================
+
+% ── ACM Computing Classification System (CCS) Concepts ────────────────────
+\begin{CCSXML}
+<ccs2012>
+  <concept>
+    <concept_id>10002978.10002979</concept_id>
+    <concept_desc>Security and privacy~Software security engineering</concept_desc>
+    <concept_significance>500</concept_significance>
+  </concept>
+  <concept>
+    <concept_id>10002978.10003006.10003008</concept_id>
+    <concept_desc>Security and privacy~Malware and its mitigation</concept_desc>
+    <concept_significance>500</concept_significance>
+  </concept>
+  <concept>
+    <concept_id>10002978.10003006.10003014</concept_id>
+    <concept_desc>Security and privacy~Supply chain attacks</concept_desc>
+    <concept_significance>300</concept_significance>
+  </concept>
+  <concept>
+    <concept_id>10010147.10010257.10010293</concept_id>
+    <concept_desc>Computing methodologies~Natural language processing</concept_desc>
+    <concept_significance>100</concept_significance>
+  </concept>
+</ccs2012>
+\end{CCSXML}
+
+\ccsdesc[500]{Security and privacy~Software security engineering}
+\ccsdesc[500]{Security and privacy~Malware and its mitigation}
+\ccsdesc[300]{Security and privacy~Supply chain attacks}
+\ccsdesc[100]{Computing methodologies~Natural language processing}
+
+\keywords{LLM agent marketplace, software supply chain, capability disclosure,
+static analysis, capability mismatch, skill security, MCP}
+
+\title{Detecting Capability-Description Mismatches\\ in LLM Agent Ecosystems}
+
+% Anonymous submission
+\author{Anonymous Authors}
+\affiliation{\institution{Anonymous Institution}}
+
+% ── Abstract (must come before \maketitle in acmart) ──────────────────────
+\begin{abstract}
+LLM skill marketplaces grant third-party plugins ambient authority over
+files, credentials, and network connections, yet rely on free-text
+descriptions as the sole consent mechanism---creating a systematic gap
+between user-visible disclosures and actual executable behavior.
+We present \sysname, a deterministic publish-time screening workflow
+that extracts capabilities from multi-file skill artifacts via 300+
+regex patterns (LSCPS, 14 families) and ranks submissions by
+capability-description inconsistency using Capability Recall (CR) and
+the Capability Discrepancy Index (CDI).
+Across \NskillsDMR{} \clawhub{} skills, \ResultICone{} show complete
+capability non-disclosure (IC-1, CR\,=\,0) and \ResultICtwo{} partial
+non-disclosure (IC-2), with corpus-mean CR\,=\,\ResultCR{} and
+CDI\,=\,\ResultCDI{}; the same pipeline applied without adjustment
+to \NskillsSH{} \skillssh{} skills yields $>$90\% inconsistency---
+consistent with the pattern being widespread rather than platform-specific.
+A stratified security-relevance study (\textsection\ref{sec:detection},
+$\kappa{=}0.81$) confirms that 53.8\% of top-ranked mismatches are
+security-relevant consent-risk cases rather than benign documentation gaps;
+against \Nmalicious{} forensically confirmed malicious skills---missed
+entirely by the platform scanner (0\% recall)---\sysname achieves
+94.1\% recall and a \textbf{16.3$\times$ lift} at a 200-skill
+review budget, providing triage value orthogonal to existing scanners.
+The system is a \emph{prioritization aid for human review},
+not a standalone maliciousness detector.
+\end{abstract}
+
+\maketitle
+
+% ── Body (≤12 pages, excl. references and appendices) ─────────────────────
+\input{sections/01_introduction}
+\input{sections/02_background}
+\input{sections/03_taxonomy}
+\input{sections/07_detection}
+\input{sections/04_static_analysis}
+\input{sections/05_temporal_analysis}
+\input{sections/06_ground_truth}
+\input{sections/08_related_work}
+\input{sections/09_conclusion}
+
+% ── References ────────────────────────────────────────────────────────────
+\bibliographystyle{ACM-Reference-Format}
+\bibliography{references}
+
+% ── Appendices (do not count toward page limit) ────────────────────────────
+\appendix
+\input{sections/appendix}
+
+% ── Required Statements ───────────────────────────────────────────────────
+\section*{Ethics Considerations}
+\input{sections/ethics}
+
+\section*{Artifact Availability}
+\input{sections/openscience}
+
+\end{document}

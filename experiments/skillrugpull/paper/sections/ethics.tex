@@ -1,0 +1,27 @@
+% Ethics Considerations
+% Required by ACM CCS 2026
+
+We performed a stakeholder-based ethics analysis following the Menlo Report framework~\cite{dittrich2012menlo}, considering four principles:
+
+\paragraph{Beneficence.}
+Our research directly benefits platform operators and users by identifying a systematic capability-description gap that existing platform scanners entirely miss (0\% T6 recall).
+The detection pipeline we propose could prevent future supply-chain attacks affecting hundreds of users.
+
+\paragraph{Respect for Persons.}
+All data was collected from publicly accessible APIs.
+No user accounts were accessed, no private data was collected, and no skill was executed during analysis.
+T6 malicious skill identifiers are pseudonymized throughout the paper to protect affected developers who may have been victims of account compromise.
+
+\paragraph{Justice.}
+We applied our analysis uniformly across all skills in both ecosystems without targeting individual developers.
+Our framework classifies skills, not developers---the high inconsistency rate (90\%)
+reflects a widespread ecosystem norm, not individual malfeasance.
+
+\paragraph{Respect for Law and Public Interest.}
+We notified both platform operators of our findings prior to submission (responsible disclosure).
+Our crawler respected \texttt{robots.txt} and rate-limited requests to $\leq$0.5 req/s.
+No laws or terms of service were violated during data collection.
+
+\paragraph{Potential harms.}
+Publishing detailed capability extraction patterns could theoretically help attackers craft harder-to-detect malicious skills.
+We mitigate this by (a)~withholding the most specific evasion-relevant pattern details from the public artifact and (b)~sharing the full pattern bank only with platform operators and academic researchers under data use agreements.

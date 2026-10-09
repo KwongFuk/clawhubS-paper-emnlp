@@ -1,0 +1,45 @@
+% sections/08_related.tex --- SkillStrike
+
+\paragraph{Prompt injection.}
+Greshake \etal~\cite{greshake2023indirect} introduce \emph{indirect prompt injection},
+where attacker-controlled web content manipulates an LLM agent's behavior.
+Perez and Ribeiro~\cite{perez2022ignore} study direct prompt injection in single-turn settings.
+Our work differs: we do not inject adversarial inputs into the LLM directly;
+we exploit the agent's \emph{trusted tool execution} path by poisoning
+the output of a co-installed source skill.
+The agent believes it is acting on legitimate skill output,
+not adversarial user input.
+This distinction means prompt-injection defenses (input sanitization,
+constrained decoding) are structurally inapplicable to our attack.
+
+\paragraph{LLM agent security.}
+Ruan \etal~\cite{ruan2024identifying} characterize ambient authority risks
+in LLM agent systems and propose a safety evaluation framework.
+Zhan \etal~\cite{zhan2024injecagent} study tool-call injection in multi-agent pipelines.
+Yi \etal~\cite{yi2023benchmarking} benchmark LLM safety against prompt attacks.
+Our contribution is orthogonal: we study \emph{compositional risk} arising from
+the combination of skills, not the behavior of individual skills or models in isolation.
+
+\paragraph{Software supply-chain attacks.}
+Zimmermann \etal~\cite{zimmermann2019small} and Synk~\cite{synk2023report}
+study malicious package injection in npm and PyPI.
+Xi \etal~\cite{xi2023rise} analyze tool-related risks in LLM ecosystems broadly.
+Prior supply-chain attacks target code execution at install or import time.
+Our attacks execute \emph{at agent invocation time},
+require no malicious code in the skill itself,
+and leverage the agent's own tool-call machinery rather than OS-level execution.
+
+\paragraph{Compositional security in traditional systems.}
+The principle that composition increases attack surface
+is well-studied in traditional access control~\cite{felt2011android},
+microservice security, and inter-program data flow~\cite{enck2014taintdroid}.
+Our work brings this principle to the new domain of LLM agent ecosystems,
+where the composition is not statically declared, not sandboxed, and
+not visible to the user at install time.
+
+\paragraph{MCP and agent-tool security.}
+Concurrent work analyzes MCP server trust~\cite{anthropic2024mcp},
+tool schema injection, and server identity spoofing.
+Our attack uses identity spoofing (\S\ref{sec:eval_ch}) as one mechanism,
+but the core vulnerability is the \emph{shared context without capability isolation},
+which exists regardless of whether source skill output is spoofed or legitimate.

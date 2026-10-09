@@ -1,0 +1,72 @@
+% sections/09_conclusion.tex
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+We presented \sysname, a publish-time static \emph{risk-prioritization} workflow for
+surfacing capability-description mismatches in LLM agent skill marketplaces.
+The workflow combines deterministic multi-file capability extraction (LSCPS,
+14 families, \ResultFilesRead{} artifact files across \NskillsDMR{} skills)
+with a lightweight disclosure-matching layer that computes Capability Recall
+(CR), Description Precision (CP), and Capability Discrepancy Index (CDI).
+
+Our evaluation on \NskillsDMR{} \clawhub{} skills finds that
+\ResultICone{} of skills exhibit complete capability non-disclosure (IC-1,
+CR\,=\,0) and \ResultICtwo{} exhibit partial non-disclosure (IC-2),
+yielding corpus-mean CR\,=\,\ResultCR{} and CDI\,=\,\ResultCDI{}.
+These findings are robust to regex bank variation: under 8 perturbation conditions
+(strict/relaxed thresholds, 4 family ablations, 5-family taxonomy collapse),
+inconsistency rates remain structurally elevated, with the Strict condition
+still showing $>$47\% total inconsistency.
+The combined SCS\,$\cup$\,DMR rule retrieves 94.1\%
+(95\% Wilson CI:\,[80.9\%,\,98.4\%]) of \Nmalicious{} confirmed malicious skills
+that the platform's own scanner missed entirely,
+and outperforms four natural NLP baselines (lexical overlap, TF-IDF distance,
+single-file static, general-purpose linters) on every ranking metric
+(MRR: 0.019 vs. $\leq$0.002 for all baselines).
+A marketplace security team reviewing the top-200 \sysname-ranked skills
+recovers 17.6\% of confirmed T6 cases with a 16.3$\times$ lift over random,
+compared to 0\% for the platform scanner under any budget.
+Cross-platform validation on \NskillsSH{} independent skills suggests
+that capability-description inconsistency exceeds 90\%
+across both ecosystems without parameter retuning.
+
+\paragraph{Limitations.}
+LSCPS is a conservative lower bound: capabilities expressed via
+non-standard idioms or obfuscated code are not captured.
+Correspondingly, CR\,=\,\ResultCR{} should be interpreted as an
+upper bound on actual disclosure---true gaps may be smaller.
+The T6 ground truth (\Nmalicious{} skills) is limited by available
+confirmed cases; recall estimates carry wide confidence intervals.
+The \clawhub{} ecosystem, while the largest LLM skill marketplace
+at the time of study, is smaller than mature package registries
+(PyPI: $>$500K packages; npm: $>$2M packages).
+We emphasize \emph{early-warning value}: documenting and hardening
+the threat surface at 18K skills---when structural remediation
+(per-skill capability manifests, YAML declaration enforcement)
+is still tractable---is precisely when measurement papers are most actionable.
+The npm event-stream and node-ipc precedents (\S\ref{sec:related})
+demonstrate that supply-chain attacks scale faster than defenses;
+our goal is to break that pattern before it repeats in LLM skill ecosystems.
+
+\paragraph{Future Work.}
+\textbf{AutoDesc and CapManifest} (§\ref{sec:autodesc}) represent the
+primary constructive extension: an LLM-assisted description drafting tool
+driven by LSCPS extraction results, paired with a machine-readable
+CapManifest protocol that closes the IC gap from the developer side.
+Evaluation goals include CR improvement rate ($\text{CR}_{\text{after}} \to 1.0$),
+description acceptability in user studies, and false-capability rate.
+\textbf{LLM semantic adjudication:} the five-model open-source ensemble
+(prototype implemented) would reduce LSCPS false positives by verifying
+that matched patterns are semantically functional.
+\textbf{Expanded T6 ground truth} via coordinated platform disclosure
+would improve statistical power on recall estimates.
+\textbf{Real-time deployment}: integrating SCS+DMR as a publish-time
+CI/CD gate would move \sysname from offline triage to active marketplace governance.
+We view \sysname and AutoDesc as complementary layers---detection and remediation---
+that together make the path of accurate disclosure easier than the path of omission.
+
+\section*{Acknowledgments}
+
+\textit{Anonymized for review.}
+

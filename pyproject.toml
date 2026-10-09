@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clawhub-analyzer"
+version = "0.1.0"
+description = "Public ClawHub crawler and baseline analysis toolkit for academic security research."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+  { name = "Anonymous Research Draft" }
+]
+dependencies = [
+  "beautifulsoup4>=4.12,<5",
+  "httpx>=0.27,<0.29",
+  "pandas>=2.2,<3",
+  "playwright>=1.50,<2",
+  "pydantic>=2.10,<3",
+  "pydantic-settings>=2.7,<3",
+  "rich>=13.9,<14",
+  "tenacity>=9,<10",
+  "typer>=0.15,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<9",
+]
+
+[project.scripts]
+clawhub-analyzer = "clawhub_analyzer.cli:app"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

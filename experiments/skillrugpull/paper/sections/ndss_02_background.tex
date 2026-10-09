@@ -1,0 +1,71 @@
+% sections/ndss_02_background.tex  — NDSS 2027
+
+\subsection{LLM Agent Skill Marketplaces}
+
+LLM skill marketplaces expose installable tools that extend agent
+capabilities via standardized protocols such as the Model Context Protocol (MCP)~\cite{anthropic2024mcp}.
+A skill is a self-contained package comprising:
+(i) a \emph{description} (natural-language documentation visible to users),
+(ii) \emph{tool definitions} (structured capability declarations),
+and (iii) \emph{implementation code} (executed by the agent runtime).
+\clawhub, launched with MCP in late 2024, is the largest such marketplace,
+with \NskillsCH skills and $>$2.1M installs as of March 2026.
+
+\paragraph{Ambient authority and sessions.}
+Installed skills execute with the privileges of the agent runtime---typically
+the user's OS account.
+Skills can read and write files, execute shell commands, make network requests,
+and read credentials without per-action OS-level confirmation.
+This \emph{ambient authority} model, common in agent frameworks~\cite{ruan2024identifying},
+means that a skill's behavior is constrained only by its own code
+and the LLM's willingness to call its tools.
+
+\subsection{Threat Model}
+
+\paragraph{Principals.}
+We consider three principals:
+(1)~the \emph{user}, who installs and interacts with skills;
+(2)~the \emph{skill developer}, who publishes skills to the marketplace;
+and (3)~the \emph{attacker}, who may be a malicious skill developer
+or an attacker controlling content fetched by a legitimate source skill.
+
+\paragraph{Attacker capabilities.}
+The attacker:
+\begin{itemize}[leftmargin=*,topsep=2pt]
+  \item can publish skills with benign-looking descriptions
+    that omit dangerous capabilities (supply-chain attacker), OR
+  \item can control content deliverable through a source skill's
+    data-fetch operations (\eg web pages, emails, API responses)---the
+    \emph{prompt injection via external content} model~\cite{greshake2023indirect}.
+\end{itemize}
+
+\paragraph{Attack goal.}
+The attacker aims to cause the agent to invoke a dangerous capability
+$\kappa$ of an installed sink skill, without the user's knowledge
+or direct authorization, producing a real system-level effect $e$
+(\eg file deletion, shell command execution, data exfiltration).
+
+\paragraph{Out of scope.}
+We do not model: direct UI-level social engineering of users,
+OS-level privilege escalation beyond the agent runtime's account,
+or attacks on the marketplace platform infrastructure itself.
+
+\paragraph{Key assumption.}
+The attack is \emph{enabled by the IC-1 gap}:
+the user installed the sink skill because its description appeared benign,
+and therefore has no awareness that $\kappa$ is possible.
+This distinguishes our threat from known prompt injection scenarios
+where the dangerous capability is explicitly documented.
+
+\subsection{Why Descriptions Are the Only Defense}
+
+Unlike Android (permission manifests~\cite{felt2011android}),
+npm (lockfiles + audit~\cite{synk2023report}),
+or sandboxed browser extensions (capability APIs),
+LLM skill marketplaces have \emph{no machine-enforceable permission model}.
+The MCP standard defines tool schemas, but these describe the API surface,
+not the security implications of tool calls.
+A skill declaring a \texttt{run\_command(cmd: str)} tool provides no
+machine-readable signal that \texttt{cmd} is user-controlled or dangerous.
+Natural-language descriptions are therefore the \emph{de facto}
+capability disclosure mechanism, and their accuracy is a security property.

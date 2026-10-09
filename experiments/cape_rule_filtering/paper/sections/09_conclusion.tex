@@ -1,0 +1,46 @@
+% sections/09_conclusion.tex --- SkillStrike
+
+We presented \sysname, a systematic study of \emph{skill composition attacks}---
+a new class of agent supply-chain exploits in which an adversary
+exploits the shared context of co-installed LLM skills to trigger
+dangerous, undisclosed capabilities without user knowledge or consent.
+
+Our three-stage framework establishes the attack from discovery through validation.
+\lscps identifies over 4,000 exploitable source-sink pairs in \NskillsCH{} \clawhub skills
+using \NpatternsLSCPS{}+ static patterns, with 100\% recall on
+independently confirmed malicious skills versus 0\% for the platform's scanner.
+LLM semantic verification (two-stage Codex chain-of-thought) improves precision
+by $21\times$, reducing 4,154 LSCPS candidates to \NcodexConfirm{} confirmed
+exploitable paths on \skillssh{}.
+Live-agent experiments on two independent platforms confirm the attack:
+on \clawhub, \NpairsCHshell/\NpairsCHshell{} shell-execution pairs and
+\NpairsCHConeok/\NpairsCHCone{} LLM-context injection pairs succeed;
+on \skillssh{}, \NpairsSSsuccess/\NpairsSSlaunched{} pairs across all five
+sink capability families succeed~(\PairsSSrate),
+with zero install-time or runtime safety gates triggered in either experiment.
+
+Three structural conclusions follow.
+First, the attack surface is \emph{compositional}:
+it does not exist in any individual skill, only in combinations,
+making per-skill auditing an insufficient defense.
+Second, current agent safety policies are
+heuristic-based and channel-dependent:
+they block memory writes from direct search-context injection
+but pass the same operations through alternate channels
+and pass shell commands unconditionally through all channels.
+Third, the attack is \emph{platform-agnostic}:
+it replicates across two distinct agent runtimes, two marketplaces,
+and two attack models (two-skill composition and self-exfil),
+confirming it is a structural property of shared-context skill ecosystems,
+not an artifact of any single platform's design.
+
+LLM agent skill marketplaces are growing rapidly while operating without
+capability isolation, permission manifests, or install-time composition audits.
+As agent autonomy expands to financial operations, multi-agent orchestration,
+and computer-use tasks, the consequences of this gap will compound.
+We call on platform operators to adopt mandatory capability manifests,
+runtime cross-skill context isolation, and publish-time static screening.
+All tooling, datasets, and experiment artifacts are released to facilitate this work.
+
+\paragraph{Acknowledgments.}
+Omitted for anonymous review.

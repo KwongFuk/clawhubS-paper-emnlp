@@ -1,0 +1,145 @@
+% sections/01_introduction.tex
+
+\section{Introduction}
+\label{sec:introduction}
+
+The rise of LLM-powered skill marketplaces---platforms where developers
+publish installable agents that extend the capabilities of large language
+models~\cite{xi2023rise,schick2024toolformer,yao2023react}---represents a new class of software supply chain.
+Unlike traditional package managers~\cite{zimmermann2019small,duan2021measuring}, skills operate with
+\emph{NLP-driven ambient authority}: once installed, they act on behalf of the user
+across sessions, reading files, sending messages, executing shell commands,
+and accessing credentials, often without per-action confirmation or OS-level sandboxing~\cite{ruan2024identifying}.
+
+\clawhub{}, the largest public LLM skill marketplace at the time of our study,
+had 18,443 listed skills and $>$2.1M installs as of March 2026---growing
+at $\approx$40\% year-over-year since the MCP standard's release~\cite{anthropic2024mcp}.
+Historically, supply-chain security problems are \emph{hardest to address at scale}:
+the npm event-stream attack (\S\ref{sec:related}) reached 2M downloads before detection.
+Measuring and hardening the threat surface \emph{now}, at 18K skills,
+is orders of magnitude cheaper than intervening at 1M skills.
+This motivates a publish-time screening approach focused on exposing
+consent-risk gaps before harm reaches users.
+
+Unlike mobile operating systems (\eg Android) which enforce capability boundaries
+via strict, machine-readable permission manifests~\cite{felt2011android,au2012pscout}, LLM skill marketplaces rely
+overwhelmingly on unstructured natural language descriptions to negotiate user consent.
+This gap creates a novel trust problem.
+When a user installs a ``calendar scheduling'' skill,
+they implicitly trust its description to accurately reflect
+what the skill will do.
+But how accurate are these descriptions?
+And what happens when a skill's author quietly updates it?
+
+We answer these questions by proposing a publish-time screening workflow for capability-description mismatches in LLM agent ecosystems.
+Importantly, while much prior research focuses on \emph{prompt injection}~\cite{greshake2023indirect}
+(adversarial modification of agent inputs), we study the \emph{supply chain attack surface}~\cite{ohm2020backstabber,ladisa2023taxonomy}:
+deceptive or malicious behavior embedded directly within the installed tool code itself.
+
+\paragraph{What we detect and what we do not.}
+Our system targets a specific and narrow threat:
+\emph{skills whose actual runtime capabilities ($\mathcal{C}_{\text{act}}$) substantially
+exceed their described capabilities ($\mathcal{C}_{\text{vis}}$) in security-sensitive
+dimensions}---specifically involving credential access, outbound
+data exfiltration, autonomous execution, or destructive file operations.
+We do \emph{not} claim to detect all malicious code, runtime exploits,
+JIT-payload downloaders, or prompt injection attacks.
+A critical property of LLM skills is that the description is the \emph{only}
+(and often only partially read) capability disclosure mechanism available
+to users at install time---even if users do not read it carefully,
+its systematic failure enables supply-chain deception at scale.
+We document this gap and propose a triage pipeline that prioritizes
+security-relevant mismatches over benign documentation lapses.
+
+\paragraph{Research questions.}
+In this work, we investigate the following three research questions:
+
+\begin{itemize}[leftmargin=*,topsep=2pt,itemsep=1pt]
+
+\item \textbf{RQ1 (Prevalence \& Disclosure Quality):}
+  How prevalent is capability-description inconsistency across LLM skill
+  marketplace platforms, and do developers provide skill descriptions that
+  accurately and meaningfully reflect their skills' actual executable behavior?
+
+\item \textbf{RQ2 (Detection \& Family Taxonomy):}
+  Can we systematically identify the gap between skill descriptions and
+  actual code capabilities?
+  Which capability families are most frequently and severely under-disclosed,
+  and can a static multi-file extraction pipeline expose these gaps at
+  publish time?
+
+\item \textbf{RQ3 (Automated Disclosure Remediation):}
+  Can automatically generated capability descriptions---derived from static
+  code analysis---effectively close the disclosure gap and supply developers
+  and users with accurate, actionable capability information?
+
+\end{itemize}
+
+Our key contributions are:
+
+\begin{itemize}[leftmargin=*,topsep=3pt,itemsep=2pt]
+
+\item \textbf{IC Framework and Deterministic Publish-Time Screening.}
+We propose \sysname, a formal Inconsistency Checking (IC) difference-matrix
+framework and a deterministic publish-time screening pipeline that extracts
+capabilities from all skill artifacts (SKILL.md, Python/JS/Shell source,
+dependency manifests) via 300+ regex patterns (LSCPS, 14 families).
+Multi-file aggregation is essential: 32.4\% of confirmed malicious skills
+have high-risk capabilities exclusively in non-SKILL.md files.
+Semantic adjudication and temporal monitoring are optional extensions;
+the core system---SCS + DMR---is fully deterministic and requires no LLM.
+
+\item \textbf{Ecosystem-Scale Measurement and Security-Relevance Study.}
+Across \NskillsCH{} \clawhub{} skills, \ResultICone{} exhibit complete
+capability non-disclosure (IC-1) and \ResultICtwo{} partial non-disclosure (IC-2),
+producing corpus-mean CR\,=\,\ResultCR{} and CDI\,=\,\ResultCDI{}.
+A stratified 500-skill human study (E4, \S\ref{sec:detection};
+pre-defined rubric independent of T6; inter-rater $\kappa{=}0.81$)
+finds 53.8\% of IC mismatches are security-relevant consent-risk cases
+---not mere documentation incompleteness.
+Cross-ecosystem validation on \NskillsSSH{} \skillssh{} skills yields $\approx$90\%
+inconsistency, consistent with structural prevalence across marketplaces.
+
+\item \textbf{Triage Evaluation on Confirmed Malicious Skills.}
+On 40 forensically documented malicious version pairs (34 unique skills,
+$\kappa{=}0.91$), SCS$\cup$DMR retrieves 32/34 (94.1\%,
+95\% Wilson CI:\,[80.9\%,\,98.4\%]), while all baselines retrieve none.
+At a 200-skill review budget on the full \NskillsDMR{}-skill corpus,
+\sysname achieves \textbf{16.3$\times$ lift} over random review---
+orthogonal to, and not a replacement for, binary malware scanning.
+
+\end{itemize}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/fig_pipeline_overview.pdf}
+\caption{\sysname publish-time screening pipeline. Skill artifacts feed into
+  multi-file capability extraction (SCS), producing the IC classification
+  and CDI-ranked review queue (DMR).
+  Temporal monitoring (TDM) and semantic adjudication (SA) are
+  \emph{optional extensions}---not required for the main triage results;
+  current core evaluation covers SCS+DMR only.}
+\label{fig:overview}
+\end{figure}
+
+\paragraph{Responsible disclosure.}
+We notified both platforms of our findings prior to publication.
+All skill identifiers in T6 cases have been pseudonymized in this version.
+
+\paragraph{Open science.}
+Our detection pipeline source code, full \NskillsDMR{} IC classification
+results, and the anonymized T6 ground-truth corpus are available
+for review via anonymous repository;
+upon acceptance, we will release the complete artifact package including
+the full \lscps{} regex bank, data extraction scripts,
+and reproducible evaluation notebooks following USENIX artifact evaluation guidelines.
+
+\paragraph{Paper organization.}
+\S\ref{sec:background} provides our threat model and capability taxonomy.
+\S\ref{sec:taxonomy} formalizes the IC framework and difference matrix.
+\S\ref{sec:detection} defines the multi-layer detection pipeline.
+\S\ref{sec:static}--\ref{sec:groundtruth} present three evaluations:
+ecosystem-scale measurement with cross-platform validation,
+temporal update-risk analysis,
+and malicious injection retrieval on ground-truth cases.
+\S\ref{sec:related} discusses related work.

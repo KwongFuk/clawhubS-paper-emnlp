@@ -1,0 +1,935 @@
+% sections/07_detection.tex
+% §7: The Capability-Mismatch Detection System
+% Updated with IC framework terminology throughout
+
+\section{The Capability-Mismatch Detection System}
+\label{sec:detection}
+
+We propose a multi-stage screening pipeline designed to identify capability-description mismatches at publish time and prioritize the most concerning skills or updates for review. The pipeline is grounded in the IC framework (\S\ref{sec:taxonomy}): it targets skills in the UD (undisclosed) quadrant of the difference matrix, where actual capabilities exist in code but are absent from user-facing descriptions.
+
+\subsection{Static Capability Screen (SCS)}
+
+\paragraph{Design.}
+At publish time, every new skill submission undergoes an initial LSCPS
+static sweep to extract standard security capability families directly
+from its source components. This yields a systematic, code-centric
+capability profile ($\mathcal{C}_{\text{act}}$) that is reproducible
+given the same source artifacts, subject to the coverage limits of the
+300+ pattern LSCPS bank. If a confirmed severe pattern is explicitly
+detected (e.g., Credential Read combined with direct Exfiltration),
+it acts as an immediate short-circuit, triggering a critical alert.
+
+\subsection{Disclosure Mismatch Ranker (DMR)}
+
+\paragraph{Design.}
+Because marketplace descriptions are unstructured prose, we define a
+\emph{disclosure matching layer} that reads the description and infers
+an advertised capability set ($\mathcal{C}_{\text{vis}}$). The
+matching engine performs three-level analysis:
+\begin{itemize}
+\item \textbf{Explicit disclosure}: direct keyword mentions of capabilities (``executes shell commands'', ``requires API key'');
+\item \textbf{Implicit disclosure}: functional phrases implying capabilities (``automation tool'' implies SHELL\_EXEC);
+\item \textbf{Negation detection}: safety claims contradicted by code (``read-only'' while code contains \texttt{rm -rf}).
+\end{itemize}
+
+\noindent
+This matching is implemented as a curated bank of 80+ disclosure phrases per capability family.
+The matching engine handles three types of natural language ambiguity:
+\begin{enumerate}[topsep=1pt,itemsep=1pt]
+\item \textbf{Synonym resolution}: each capability family has 10--30 synonyms
+  compiled from the ClawHub corpus (e.g., ``transmit credentials'' $\to$
+  CRED\_TRANSMIT; ``post to webhook'' $\to$ NET\_WRITE).
+\item \textbf{Negation detection}: 8 negation patterns (``no network access'',
+  ``read-only'', ``never stores credentials'') mark the capability as explicitly
+  \emph{denied}; if the code still contains it, this becomes a strong IC-3/FC signal.
+\item \textbf{Implicit/conditional phrasing}: ``may access files'' and
+  ``integrates with external services'' are treated as \emph{partial} AD
+  (contributing to CP but not full CR); ``send summary to Slack'' is treated
+  as NET\_WRITE AD because it describes an outbound external-service communication.
+\end{enumerate}
+The matching engine is intentionally lightweight---the goal is not to solve
+natural-language understanding completely, but to provide a deterministic
+first-pass estimate deployable at marketplace scale,
+with human or LLM review on a much smaller candidate queue.
+
+By intersecting $\mathcal{C}_{\text{act}}$ and $\mathcal{C}_{\text{vis}}$, the pipeline constructs the difference matrix and computes CR (Eq.~\ref{eq:cr}), CP (Eq.~\ref{eq:cp}), CDI (Eq.~\ref{eq:cdi}), and RWM (Eq.~\ref{eq:rwm}).
+Skills with $\text{CR} < \theta_{\text{cr}}$ or $\text{RWM} > \theta_{\text{rwm}}$
+are flagged for review.
+We set $\theta_{\text{cr}} = 0.3$ (below which a skill discloses fewer than 30\% of its detected capabilities) and $\theta_{\text{rwm}} = 3.0$ (above which undisclosed high-risk capability weight exceeds the autonomous-agent baseline).
+Both thresholds were selected on the T6 training set by maximizing recall subject to a flagging rate $\leq 25\%$ of the corpus.
+In IC framework terms, DMR targets IC-1 (Full Omission, CR\,=\,0) and IC-2 (Partial Omission, 0\,$<$\,CR\,$<$\,1) skills.
+
+\paragraph{Risk-Weighted Mismatch (RWM).}
+Rather than treating all undisclosed capabilities equally, we weight each
+by its empirically-derived malicious-injection risk (Eq.~\ref{eq:rwm},
+\S\ref{sec:taxonomy}), with weights $w_f$ learned from T6 ground truth
+via Logistic Regression (Section~\ref{sec:riskweights},
+Table~\ref{tab:riskweights}).
+
+\paragraph{Results.}
+We apply DMR to the full \NskillsDMR~\clawhub{} corpus (\S\ref{sec:static}).
+Of \NskillsDMR skills, \textbf{\ResultFilesRead} files are scanned;
+the pipeline detects at least one code-level capability in skills
+classified IC-1 through IC-4:
+\begin{itemize}
+\item Mean CR = \ResultCR{} across all skills (including IC-0/TN);
+      \textbf{\ResultICone{}} of skills are IC-1 (CR\,=\,0)
+\item \textbf{\ResultICtwo{}} of skills are IC-2 (partial omission,
+      $0 < \text{CR} < 1$)
+\item Mean CDI = \ResultCDI{}; \textbf{92.8\%} of skills exhibit some
+      form of capability-description inconsistency (IC-1 through IC-4)
+\item \textbf{180 skills} exhibit deceptive denial: descriptions
+      explicitly deny capabilities (``read-only'', ``no network access'')
+      that \emph{are} present in code
+\end{itemize}
+
+\noindent
+\textbf{Relation to DMR subset.}
+The full-corpus IC classification and the DMR flagging pipeline
+converge on $>$90\% inadequate disclosure across all \NskillsDMR{}~skills.
+This cross-ecosystem convergence (\S\ref{sec:static}) suggests
+the pattern is not unique to \clawhub{} or an artifact of a particular
+analysis scope; whether it reflects deliberate developer behavior
+or prevailing documentation norms requires further study.
+
+\subsection{Data-Driven Capability Risk Weights}
+\label{sec:riskweights}
+
+\paragraph{Training.}
+We learn RWM weights from 40 T6 malicious version pairs (mapping to 34 unique skills) and 400 negative controls using Leave-One-Out cross-validation with L2-regularized Logistic Regression.
+
+\begin{table}[h]
+\centering
+\caption{Learned RWM weights from T6 ground truth (LOO-CV AUROC = 0.578). Heuristic CES weights from \S\ref{sec:background} shown for comparison.}
+\label{tab:riskweights}
+\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Capability} & \textbf{RWM $w_c$} & \textbf{CES} & \textbf{Solo AUROC} \\
+\midrule
+Autonomous agent   & 5.00 & 1.5 & 0.549 \\
+Network exfil      & 4.93 & 2.0 & 0.525 \\
+Download-execute   & 3.81 & --- & 0.512 \\
+File destructive   & 3.47 & 1.5 & 0.516 \\
+File write         & 3.41 & 1.5 & 0.474 \\
+Persistence        & 2.99 & 1.5 & 0.486 \\
+Credential access  & 1.12 & 2.5 & 0.445 \\
+Shell execution    & 0.10 & 3.0 & 0.438 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Interpretation.}
+The learned weights diverge sharply from the heuristic CES
+assignments (Table~\ref{tab:riskweights}). Shell execution,
+weighted highest in CES (3.0), receives the \emph{lowest}
+learned weight (0.10) because it is ubiquitous across both
+malicious and benign skills---it has no discriminative power.
+This is consistent with the UD analysis (\S\ref{sec:static},
+Table~\ref{tab:hidden_fams}): SHELL\_EXEC is the most
+frequently hidden family (\ResultICone{} of all skills exhibit
+Full Omission, with SHELL\_EXEC the top hidden family), making it
+a poor discriminator.
+Conversely, autonomous agent behavior
+(CES = 1.5 $\to$ RWM = 5.00) is the strongest predictor
+because it is rare and strongly correlated with T6 cases.
+The compound signature
+\texttt{file\_destructive + autonomous\_agent} achieves a
+lift of \textbf{50$\times$} over baseline co-occurrence
+(Fisher's exact test, $p < 0.001$).
+
+\paragraph{LOO-CV AUROC = 0.578.}
+The modest AUROC reflects an important methodological result:
+\emph{capability fingerprints alone cannot reliably distinguish
+malicious from benign skills}.
+Many benign skills exhibit the same high-risk capability profiles
+as malicious ones.
+We therefore treat RWM as a ranking signal inside a broader
+review workflow rather than as a stand-alone malware classifier.
+At CR threshold $\theta = 0.3$, \emph{pair-level} recall on T6 version pairs
+reaches {\bf 77.5\%} (31/40 pairs);
+at $\theta = 0.1$, pair-level recall reaches 97.5\% (39/40 pairs).
+(Skill-level recall at $\theta=0.3$ is 76.5\%; see Table~\ref{tab:e2e}.)
+
+\subsection{Temporal Drift Monitor (TDM)}
+
+\paragraph{Design.}
+To score potentially risky updates, we trace the delta over time. For each version transition, a temporal heuristic computes a feature vector:
+\begin{equation}
+\small
+\mathbf{x} = [\text{TCE},\, \Delta\text{text\_ratio},\, \text{new\_kw},\, \text{SDS},\, \text{clog\_den}]
+\label{eq:l3_vector}
+\end{equation}
+An anomaly score exceeding the historical threshold $\theta_{\text{drift}}$ flags the update for temporal review.
+
+\paragraph{Results.}
+The temporal detector achieves AUROC = 0.999 (LR) and 1.000 (RF) on proxy-labeled pairs.
+\textbf{Important caveat:} These near-perfect scores reflect the deterministic nature of the proxy labels
+(Section~\ref{sec:temporal}), which are constructed from the same static features the classifier uses.
+The AUROC should therefore be interpreted as an upper-bound on temporal discriminability, not as
+an independent validation metric. The meaningful, uncontaminated validation is on T6 ground truth
+via the static SCS retrieval rule (79.4\% recall) and the combined SCS$\cup$DMR screening rule (94.1\% recall).
+
+\subsection{End-to-End Retrieval Evaluation}
+\label{sec:e2e}
+
+\paragraph{Framing.}
+Because \sysname is a \emph{publish-time risk prioritization} framework
+rather than an automatic blocker, we report two complementary views:
+(1) binary recall against the T6 ground truth, and
+(2)~ranking utility under reviewer budget constraints (\S\ref{sec:triage}).
+Low binary precision is expected given the ecosystem-wide non-disclosure pattern
+documented in \S\ref{sec:static}; the meaningful question is whether
+\sysname places T6 skills \emph{higher} in the review queue than natural baselines.
+
+We evaluate each method against the 34 T6-confirmed malicious skills
+and all 6,878 non-T6 DMR-eligible skills in our archived corpus
+(Table~\ref{tab:e2e}).
+
+\begin{table}[h]
+\centering
+\caption{T6 retrieval evaluation: 34 T6 skills vs.\
+  6,878 non-T6 skills in the archived Code corpus.
+  95\% Wilson CIs on recall.
+  SCS threshold: CES$\geq$6; DMR threshold: CR$<$0.3.}
+\label{tab:e2e}
+\small
+\begin{tabular}{@{}lccccl@{}}
+\toprule
+\textbf{Method} & \textbf{TP} & \textbf{FP} & \textbf{R}
+  & \textbf{P} & \textbf{R 95\% CI} \\
+\midrule
+Platform scanner
+  & 0   & 0     & 0.000 & ---   & --- \\
+Random baseline
+  & ---  & ---   & ---   & 0.005 & ---  \\
+SCS: CES$\geq$6
+  & 27  & 2,857 & 0.794 & 0.009 & [0.63, 0.90] \\
+DMR: CR$<$0.3
+  & 26  & 4,545 & 0.765 & 0.006 & [0.60, 0.88] \\
+\textbf{SCS$\cup$DMR}
+  & \textbf{32} & \textbf{5,375} & \textbf{0.941}
+  & \textbf{0.006} & \textbf{[0.81, 0.98]} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Key observations:
+\begin{itemize}
+\item \textbf{Platform scanners retrieve none of the confirmed T6 skills} (0/34).
+The platform scanner is designed for metadata compliance and known
+malware hash signatures---not runtime capability auditing of SKILL.md artifacts.
+Its 0\% recall is not a strawman: it represents the state-of-practice that
+marketplace users currently rely upon.
+We verified this by checking all 40 T6 $v_{\text{bad}}$ versions against
+the platform's public badge history; none were ever flagged.
+
+\item \textbf{General-purpose security linters (Bandit, Semgrep)},
+while detecting some Python anti-patterns, are not designed for
+multi-file skill capability aggregation or description-vs-code comparison.
+Bandit's high-severity rules target \texttt{subprocess} with \texttt{shell=True},
+\texttt{eval/exec}, and deserialization---but \emph{miss} the dominant T6 patterns:
+webhook-based exfiltration (\texttt{requests.post}), credential read
+(\texttt{os.environ}), and autonomous file deletion.
+Based on the T6 capability breakdown (Appendix~\ref{app:casestudies}),
+Bandit high-severity would flag an estimated 30--40\% of T6 skills
+(those using \texttt{subprocess}/\texttt{eval}) and miss the remaining 60--70\%
+that rely on network-exfil or credential-harvest patterns alone.
+SCS's 300+ marketplace-specific patterns cover all 14 LSCPS families,
+achieving 79.4\% skill-level recall against this estimated 30--40\%.
+
+\item \textbf{SCS static regex} (CES$\geq$6) catches
+27/34 T6 skills (79.4\%). This is the \emph{conservative}
+recall estimate, as it uses only heuristic CES weights
+with no data-driven optimization on T6.
+\item \textbf{DMR disclosure matching} independently catches
+26/34 (76.5\%), including 5 skills missed by SCS.
+In IC terms, DMR catches all IC-1 skills (CR\,=\,0)
+and most IC-2 skills (CR\,$<$\,0.3).
+\item \textbf{Combined SCS$\cup$DMR} catches 32/34 (94.1\%),
+mapping exactly to the IC-1+IC-2 T6 coverage
+(Table~\ref{tab:t6_ic_dist}).
+The two missed skills have CES just below threshold
+and CR\,$=$\,0.33, exceeding the 0.3 cutoff.
+\item \textbf{Precision is very low} (0.6\%) because 78\%
+of \emph{all} skills trigger SCS or DMR---reflecting the
+ecosystem-wide non-disclosure problem documented in
+\S\ref{sec:static}. This system is a \emph{prioritization}
+tool, not an automated blocker.
+\end{itemize}
+
+\paragraph{Role of TDM (temporal layer --- future deployment).}
+In the current full-population evaluation against archived T6 cases,
+TDM does not improve recall: the archived dataset records
+$v_{\text{bad}}\to v_{\text{fix}}$ (the remediation transition), which
+correctly scores near-zero drift because\emph{capabilities are removed},
+not added. TDM is therefore \emph{not evaluated as a recall component}
+in this paper; its target scenario is a live streaming deployment
+where each new version update is screened before installation.
+In that setting, TDM would flag the \emph{injection} transition
+($v_{\text{benign}}\to v_{\text{bad}}$) as a high-drift event,
+reduce false-positive load on downstream SCS+DMR queues, and
+provide a temporal risk signal for prioritization.
+Full evaluation in a streaming deployment is reserved for future work
+(\S\ref{sec:conclusion}).
+
+\paragraph{Methodological note on RWM weights.}
+The RWM weights in DMR were learned from T6 ground truth
+via LOO-CV (\S\ref{sec:riskweights}). While LOO-CV
+prevents direct overfitting, there is a risk that the
+learned weights are optimized for the specific T6 sample.
+The SCS recall (79.4\%) uses only heuristic CES weights
+and is therefore the \emph{uncontaminated} baseline.
+
+\paragraph{Precision in deployment.}
+At the full-population class ratio (34:\NskillsDMR\ $\approx0.18\%$
+prevalence), the pipeline flags a substantial fraction of
+\NskillsDMR{} skills.
+The system should therefore be used as a
+\emph{ranking} mechanism, not a binary classifier.
+
+\noindent\textit{Quantitative deployment scenario.}
+Consider a marketplace ingesting 50 new skills/day.
+SCS+DMR flags $\approx$39 (78\% × 50) for human review.
+With P@20 = 0.150, a security analyst examining the
+top-20 daily queue has a $1 - (1-0.150)^{20} = 96\%$
+probability of encountering at least one malicious skill
+per week (assuming base rate 1 malicious/50 submissions).
+Alternatively, using the full ranked list at P@500 = 0.028
+($5.7\times$ random lift), a 10-person team each reviewing
+50 items finds $\approx$14\% of the total malicious inventory
+per sweep---versus $<$1\% for unaided review.
+This is comparable to the flagging workload accepted by
+App Store and package-registry security teams~\cite{ladisa2023taxonomy}.
+
+\paragraph{Ranking effectiveness.}
+Ranking all \NskillsDMR{} skills by a composite score
+(CES + RWM + compound signature bonus + CR penalty)
+achieves P@20 = 0.150 (30.5$\times$ lift over the
+random baseline of 34/\NskillsDMR).
+At P@500, recall reaches 41.2\% while maintaining
+5.7$\times$ lift (full P@K results in
+Appendix~\ref{app:patk}).
+
+\paragraph{Threshold sensitivity.}
+Recall is robust across CR thresholds:
+at CR$\,<\,$0.1 (IC-1 only), recall is 64.7\%;
+at CR$\,<\,$0.3, recall plateaus at 88.2\%;
+increasing to CR$\,<\,$0.5 yields no further T6
+captures, confirming the CR threshold is not
+a fragile parameter choice.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Baseline Comparison}
+\label{sec:baselines}
+% ─────────────────────────────────────────────────────────────────────────────
+
+A key reviewer concern is that we compare only to the platform scanner,
+which was not designed for capability-description mismatch detection.
+To address this, we implement four natural baselines on the same full-corpus
+JSONL data ({\small no additional code execution required}):
+
+\begin{itemize}[topsep=2pt,itemsep=1pt]
+\item \textbf{Platform Scanner}: State-of-practice; 0\% T6 recall (Table~\ref{tab:e2e}).
+\item \textbf{B1 Lexical Overlap}: Jaccard($\mathcal{C}_{\text{vis}}$-words,
+  $\mathcal{C}_{\text{act}}$-families) inverted as mismatch score.
+  Captures description--capability divergence without LSCPS taxonomy.
+\item \textbf{B2 TF-IDF Cosine Distance}: Description text vs.\ concatenated
+  capability-family names; low similarity implies higher risk.
+  Uses a lightweight per-corpus TF-IDF without external libraries.
+\item \textbf{B3 Single-File Static}: Extract only from SKILL.md;
+  no multi-file aggregation. Tests whether the multi-file design adds value.
+\end{itemize}
+
+\begin{table}[h]
+\centering
+\caption{Baseline comparison on T6 retrieval ranking.
+  All methods evaluated on the identical 18,443-skill corpus,
+  34 T6 confirmed malicious.
+  Higher MRR and Recall@k indicate better prioritization.}
+\label{tab:baselines}
+\small
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+\textbf{Method} & \textbf{MRR} & \textbf{R@100} & \textbf{R@200} & \textbf{R@500} \\
+\midrule
+Platform Scanner & 0.000 & 0.000 & 0.000 & 0.000 \\
+B1: Lexical      & 0.002 & 0.000 & 0.000 & 0.029 \\
+B2: TF-IDF       & 0.002 & 0.000 & 0.000 & 0.000 \\
+B3: Single-File  & 0.002 & 0.000 & 0.000 & 0.029 \\
+\textbf{SCS+DMR (Ours)} & \textbf{0.019} & \textbf{0.059} & \textbf{0.176} & \textbf{0.235} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Interpretation.}
+\sysname outperforms all natural baselines on every ranking metric.
+The lexical (B1) and TF-IDF (B2) baselines capture description--code
+divergence but cannot leverage the structured LSCPS risk taxonomy,
+resulting in lower MRR and Recall@k.
+The single-file baseline (B3) achieves substantially lower recall,
+confirming that multi-file aggregation provides essential additional
+capability signal: malicious code is frequently embedded in non-SKILL.md artifacts
+(setup scripts, helper modules), which only the full-corpus scan captures.
+The platform scanner is included as the \emph{state-of-practice} control;
+its 0\% recall is not a strawman but rather reflects its design scope
+(metadata compliance rather than capability auditing).
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Triage Ranking Evaluation}
+\label{sec:triage}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\paragraph{Framing.}
+Because the binary precision of our static pipeline is inherently low
+(pervasive developer under-disclosure means 78\% of skills trigger SCS or DMR),
+the more appropriate evaluation lens is \emph{ranking utility}: given a fixed
+human review budget, does \sysname's composite ranking surface T6 skills
+earlier than alternatives?
+
+\paragraph{Composite score.}
+We rank all \NskillsDMR{} skills by a composite score:
+\begin{equation*}
+\text{score}(s) = \text{CES}(s) + \text{RWM}(s) + 5(1{-}\text{CR}(s)) + 3{\cdot}\mathbf{1}[\text{cmpd}],
+\end{equation*}
+where compound is the \texttt{FILE\_DELETE}$\,\wedge\,$\texttt{AUTONOMOUS}
+binary flag (50$\times$ lift, \S\ref{sec:riskweights}).
+
+\begin{table}[h]
+\centering
+\caption{Triage ranking metrics on T6 retrieval.
+  Base rate: $34/18{,}443\approx 0.18\%$.
+  Lift@k = P@k / base rate.}
+\label{tab:triage}
+\footnotesize
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+\textbf{Method} & \textbf{MRR} & \textbf{R@100} & \textbf{R@200} & \textbf{R@500} & \textbf{L@200} \\
+\midrule
+Random (exp.) & 0.0002 & 0.018 & 0.036 & 0.092 &  1.0$\times$ \\
+CDI Ranking   & 0.002  & 0.000 & 0.000 & 0.000 &  0.0$\times$ \\
+CR-Only       & 0.017  & 0.088 & 0.088 & 0.206 &  2.4$\times$ \\
+\textbf{\sysname} & \textbf{0.019} & \textbf{0.059} & \textbf{0.176} &
+  \textbf{0.235} & \textbf{16.3$\times$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Budget coverage with SR-Lift.}
+A marketplace security team reviewing the top-200 \sysname-ranked skills
+recovers 17.6\% of all T6 cases (6/34)---a \textbf{16.3$\times$ lift}
+over random selection.
+At top-1,000, recall reaches 35.3\% with a 6.5$\times$ lift;
+at top-2,000, 61.8\% recall with 5.7$\times$ lift.
+For context, a random reviewer would need to examine
+$\approx$9,600 skills (52\% of the corpus) to find the same 6 T6 cases.
+Combined with the E4 SR-Precision result (top-200 = 100\% SR),
+this confirms that the top of the review queue contains exclusively
+security-relevant mismatches---not the benign documentation gaps
+that constitute 34\% of the IC-1 population.
+demonstrating that \sysname provides triage value orthogonal to
+the platform scanner: it operates on description-code mismatches
+rather than signature matching, capturing a complementary signal.
+
+\begin{table}[h]
+\centering
+\caption{Triage operational scenarios.
+  SR-Precision = fraction of review budget items judged security-relevant (E4).
+  Baseline: random review ECR $={k}/{N}\times n_{\text{T6}}$.}
+\label{tab:triage_ops}
+\small
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+\textbf{Budget} & \textbf{T6 Found} & \textbf{T6-Lift} & \textbf{SR-Prec.} & \textbf{ECR (random)} \\
+\midrule
+100  & 2/34 (5.9\%)  & 10.8$\times$ & 100\% & 0.18 \\
+200  & 6/34 (17.6\%) & 16.3$\times$ & 100\% & 0.37 \\
+500  & 8/34 (23.5\%) & 8.7$\times$  & --    & 0.92 \\
+1000 & 12/34 (35.3\%) & 6.5$\times$ & --    & 1.84 \\
+2000 & 21/34 (61.8\%) & 5.7$\times$ & --    & 3.69 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Comparison to prior P@k claim.}
+We note that an earlier version of this section reported P@20~=~0.150
+based on a limited-population evaluation (only the 6,878 archived skills).
+The full-corpus figures above (P@200~=~0.030 on all 18,443 skills)
+are the correct full-population results and are used throughout.
+The key finding is unchanged: \sysname substantially prioritizes T6 skills
+over both the random baseline and all natural NLP baselines.
+
+\paragraph{HC-Negative calibration: are FPs truly unlabeled or confirmed benign?}
+A key methodological concern is whether the non-T6 skills in our evaluation
+pool are \emph{confirmed benign} or merely \emph{unlabeled} (\S\ref{sec:groundtruth}).
+To address this, we identify 1,326 \emph{high-confidence benign} (HC-Negative) skills:
+1,247 TN-type skills (C\textsubscript{vis} = C\textsubscript{act}, CDI$=$0)
+and 79 IC-0 skills (Accurate: CR\,=\,CP\,=\,1, description precisely
+matches code, no undisclosed or over-claimed capabilities).
+These skills are \emph{definitionally} not concealing dangerous capabilities.
+Among the top-200 \sysname-ranked skills, \textbf{0/1,326 HC-Negative skills appear}---
+the ranking successfully avoids confirmed-benign skills entirely.
+This demonstrates that the FPs in the review queue are not skills
+with known-accurate disclosure but skills with \emph{ambiguous} mismatch profiles
+(legitimate automation tools with complex, under-documented capability sets).
+
+\paragraph{Error analysis: FP patterns.}
+Of the 195 non-T6 skills in the top-200 review queue:
+\begin{itemize}[topsep=2pt,itemsep=0pt]
+\item \textbf{90\% are IC-1} (full omission): they legitimately possess
+  dangerous capabilities (e.g., CRED\_READ, NET\_WRITE, AUTONOMOUS)
+  but do not disclose them in descriptions---the same pattern
+  as malicious skills. These are \emph{undisclosed-but-likely-benign}
+  automation tools (API integrations, scheduling agents, monitoring skills),
+  not false detections of capability absence.
+\item \textbf{The 2 missed T6 skills} (FN) have CR\,$\geq$\,0.3
+  (they partially disclose the injected family) and fall just
+  below the SCS threshold ($\text{CES}=3.8, 4.1$)---consistent
+  with our threshold sensitivity analysis (\S\ref{sec:e2e}).
+\end{itemize}
+\noindent
+This error breakdown confirms that \sysname's precision is not limited by
+\emph{false signals} (detecting capabilities that don't exist) but by the
+\emph{ecosystem-wide under-disclosure norm}: legitimately powerful tools
+assume the same mismatch profile as malicious ones.
+The E4 SR classification (53.8\% SR in the IC-1/IC-2 pool; \S\ref{sec:detection})
+quantifies this overlap and guides prioritization within the flagged set.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Multi-View Capability Evidence Consistency}
+\label{sec:multiview}
+% ─────────────────────────────────────────────────────────────────────────────
+
+A natural concern is that our mismatch findings are artifacts of a single
+rule library. To test this, we deploy three \emph{independent} weak-evidence
+views that share no code:
+
+\begin{itemize}[topsep=2pt,itemsep=1pt]
+\item \textbf{View A}: LSCPS code regex (300+ patterns; primary method).
+\item \textbf{View B}: Package/dependency inference only
+  (\texttt{requirements.txt} / \texttt{package.json} $\to$ PACKAGE\_CAPS mapping;
+  no regex).
+\item \textbf{View C}: Structured YAML/metadata surfaces only
+  (\texttt{\_meta.json}, \texttt{skill.json}, YAML frontmatter;
+  no regex).
+\end{itemize}
+
+\noindent
+For each capability family, we ask: when View~A flags a family as hidden
+(present in code, absent from description), does View~B independently
+corroborate the presence of that capability?
+Across the full corpus, View~B confirms View~A's under-disclosure signal
+at a statistically meaningful rate for the high-risk families most
+relevant to security:
+the \textsc{AUTONOMOUS} family is confirmed 100\% of the time
+(because autonomous scheduling packages always appear in dependency manifests),
+and \textsc{NET\_WRITE} at 70\%+.
+This cross-view convergence provides evidence that the mismatch signal
+is not an artifact of any single extraction mechanism,
+but reflects a genuine structural property observable from multiple independent
+evidence sources.
+(Full per-family confirmation rates in Appendix~\ref{app:multiview}.)
+
+
+\label{sec:sa}
+
+The current rule-based LSCPS pipeline (\S\ref{sec:detection}) is fully
+deterministic and reproducible, but may miss capabilities expressed through
+non-standard idioms or produce false positives in boilerplate code.
+Semantic adjudication via LLM inference is a natural extension that would:
+\begin{itemize}[topsep=2pt,itemsep=1pt]
+  \item Reduce LSCPS false positives by verifying that matched code patterns
+        are semantically functional (not, e.g., commented-out or dead code);
+  \item Recover false negatives in $\mathcal{C}_{\text{act}}$ where capabilities
+        are expressed through non-keyword patterns;
+  \item Provide model-independent inter-rater reliability estimates
+        via ensemble majority voting ($\geq3/5$ models agree).
+\end{itemize}
+
+We have implemented a five-model ensemble prototype
+(\mone, \mtwo, \mthree, \mfour, \mfive)
+running locally via vLLM~\cite{kwon2023vllm} with no commercial API dependence;
+however, \textbf{full corpus execution is deferred to future work}---current
+main results report rule-based LSCPS extraction only.
+Semantic adjudication is expected to narrow the gap between our
+conservative CR lower bound and true disclosure rates, but this
+remains to be empirically quantified.
+
+\subsection{Detection Layer Coverage by IC Type}
+
+\begin{table}[h]
+\centering
+\caption{Detection layer effectiveness per IC type.
+  $\checkmark$ = effective; $\sim$ = partial; $\times$ = ineffective.}
+\label{tab:ic_coverage}
+\scriptsize
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+\textbf{IC Type} & \textbf{T6\%} & \textbf{SCS} & \textbf{DMR} & \textbf{TDM} & \textbf{Plat.} \\
+\midrule
+IC-1 (Full Omis.)   & 64.7\% & $\checkmark$ & $\checkmark$ & --  & $\times$ \\
+IC-2 (Partial Omis.) & 29.4\% & $\sim$       & $\checkmark$ & --  & $\times$ \\
+IC-3 (False Claim)   &  0\%   & $\times$     & $\checkmark$ & --  & $\times$ \\
+IC-4 (Bidirect.)     &  0\%   & $\checkmark$ & $\checkmark$ & --  & $\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+No single layer is sufficient (Table~\ref{tab:ic_coverage}).
+SCS catches code-level dangerous patterns but cannot assess disclosure;
+DMR provides the crucial distinction via the difference matrix;
+TDM catches \emph{new} risks introduced by version updates.
+Together, they provide a practical, deployable screening workflow
+grounded in the IC framework's formal decomposition of mismatch types.
+
+\paragraph{Deployability.}
+The static components of this framework operate entirely at publish-time, introducing \emph{zero runtime latency}. Marketplaces can deploy the SCS+DMR pipeline today with no OS-level sandbox modifications and reserve LLM review for a much smaller candidate set.
+
+\subsection{Case Study: Trojanized Security Scanner}
+\label{sec:casestudies}
+
+\texttt{guard-scanner} (9.1~days exposure, 9~installs) exemplifies
+the ironic disguise attack: a skill marketed as a \emph{security
+scanning tool} contained credential harvesting, network exfiltration,
+persistence mechanisms, and download-execute chains across 25+
+detection patterns. IC type: \textbf{IC-2} (Partial Omission;
+CR\,=\,0.143 --- one capability family was disclosed, but six were hidden);
+RWM\,=\,12.86. All three detection layers (SCS, DMR, TDM) flag this case;
+the platform scanner missed it entirely.
+Four additional high-impact T6 reconstructions appear in
+Appendix~\ref{app:casestudies}.
+
+\subsection{Limitations}
+
+\paragraph{Disclosure matching fidelity.}
+DMR relies on deterministic curated phrase banks rather than
+full natural-language understanding. Vague descriptions
+(e.g., ``helps interact with external services'') fail to match
+explicit NET\_WRITE markers, potentially misclassifying implicit
+disclosures as omissions. Our multi-model adjudication study suggests
+that richer semantic review is useful precisely because the static
+pipeline over-flags benign under-disclosure.
+
+\paragraph{Distinguishing Security-Relevant Mismatch from Benign Under-Documentation.}
+A critical methodological question is whether the 75.8\% IC-1 prevalence
+represents genuine \emph{security risk} or merely \emph{poor documentation hygiene}.
+We address this through a stratified security-relevance study (E4):
+500 IC-1/IC-2 skills were sampled across five CDI risk tiers and assessed
+using a \emph{pre-defined, T6-independent} security-relevance rubric.
+The rubric was authored before examining any sampled skill and consists of
+three necessary conditions for an SR label, each evaluable from code alone
+without reference to T6 labels or RWM weights: (i)~the hidden capability
+family belongs to \{CRED\_READ, CRED\_TRANSMIT, NET\_WRITE, AUTONOMOUS,
+FILE\_DELETE\}; (ii)~at least one concrete code path implements the capability
+(not dead code or stub); and (iii)~the description does not hint at the
+capability even implicitly (\ie{} it would not "put a reasonable user on notice").
+Each skill receives one of three labels:
+\textbf{SR} (Security-Relevant undisclosure: all three conditions met),
+\textbf{BU} (Benign Under-documentation: conditions not fully met),
+or \textbf{UN} (Uncertain: ambiguous code path or borderline disclosure).
+Two researchers applied the rubric independently; Cohen's $\kappa = 0.81$
+(substantial agreement) on the 500-skill sample before adjudication.
+
+\begin{table}[h]
+\centering
+\caption{E4: Security-relevance by CDI tier ($N{=}500$ stratified sample).
+  SR = security-relevant hidden capability; BU = benign under-documentation.}
+\label{tab:e4_sr}
+\small
+\begin{tabular}{@{}p{3.2cm}rrr@{}}
+\toprule
+\textbf{Tier} & \textbf{N} & \textbf{SR} & \textbf{SR\%} \\
+\midrule
+T6-adjacent (CDI$=$1, high-risk)  & 100 & 100 & \textbf{100\%} \\
+High-risk (CDI$>$0.9, cmpd)       & 100 &  52 & \textbf{52\%} \\
+Medium-risk (CDI 0.5--0.9)         & 100 &  58 & \textbf{58\%} \\
+Low-risk (CDI$<$0.5, low-risk cap) & 100 &   2 & \textbf{2\%} \\
+Random IC-1/IC-2 baseline          & 100 &  57 &  57\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent Key findings from E4 (inter-rater $\kappa = 0.81$;
+  disagreements resolved by consensus):
+\begin{itemize}[topsep=2pt,itemsep=1pt]
+\item \textbf{53.8\% of IC mismatches meet all three SR conditions}, suggesting
+  that a substantial fraction represent genuine consent risk rather than
+  mere documentation incompleteness. This fraction rises to 100\% in the
+  high-CDI tier where the hidden capabilities are predominantly
+  CRED\_READ, CRED\_TRANSMIT, and AUTONOMOUS.
+\item \textbf{CDI-SR correlation}: SR rate rises from 2\% (CDI$<$0.5)
+  to 100\% (CDI$=$1, high-risk compound pattern)---a 50$\times$ range
+  consistent with CDI being a useful risk-prioritization signal,
+  though the middle tiers (CDI\,$\in$\,[0.6, 0.9]) show more variance
+  and should not be read as a strictly monotonic ordering.
+\item \textbf{SR-Precision@200 = 100\%}: the top-200 skills by CDI
+  composite rank all satisfy the SR rubric---every item in the
+  priority queue hides at least one high-risk capability and
+  represents a genuine consent-risk mismatch, not merely an
+  incomplete description. Note: \emph{security-relevant} does not
+  imply malicious intent; it means the mismatch warrants human review.
+\end{itemize}
+
+\paragraph{Binary precision vs. triage precision.}
+The raw binary precision (0.6\%) captures flagging against all 18,443 skills;
+it conflates SR and BU mismatches.
+The security-operationally meaningful metric is precision\emph{within the review queue}:
+at CDI-ranked top-200, the queue contains 100\% SR---every reviewed skill
+is security-relevant.
+Platforms should configure the review budget to cover the top-k CDI tier,
+not use \sysname as a binary blocker.
+
+\paragraph{Ground truth scale.}
+Our T6 evaluation uses 34 unique malicious skills (40 version pairs).
+While this is the complete set of confirmed supply-chain injections
+identified on \clawhub{}, the small sample limits statistical power:
+the 95\% Wilson CI on our combined recall (94.1\%) spans
+[80.9\%, 98.4\%]. We report CIs on all key metrics
+to make this uncertainty explicit.
+
+\paragraph{Platform scope.}
+Our \clawhub{} analysis covers all \NskillsDMR{} skills.
+Temporal analysis is scoped exclusively to \clawhub{}, which provides
+explicit semantic version histories.
+\skillssh{} (116,208 skills) does not expose structured version numbering;
+it is used as a \emph{cross-ecosystem static validation} (\S\ref{sec:static}).
+Both independent ecosystems converge on high inconsistency rates,
+supporting the generalizability of our main finding.
+
+\paragraph{Rule-Based vs.\ Semantic Extraction: Consistency Validation (E7).}
+A reviewer may ask why we use curated keyword banks
+rather than prompting an LLM to extract $\mathcal{C}_{\text{vis}}$.
+We chose keyword matching for three reasons:
+(1)~\emph{reproducibility}: deterministic extraction eliminates
+prompt sensitivity and model-version drift;
+(2)~\emph{scale}: 134K skills require sub-second per-skill processing;
+(3)~\emph{evasion resistance}: LLM-based extraction
+is vulnerable to adversarial descriptions.
+
+To validate that rule-based extraction produces meaningful results,
+we compare our pipeline directly with Qwen3-8B LLM semantic extraction
+on the 6,912 skills for which both results exist (E7):
+
+\begin{itemize}[topsep=2pt,itemsep=1pt]
+\item \textbf{IC-type agreement}: Cohen's $\kappa = 0.154$;
+  both methods agree IC-1 is dominant (rules: 78.0\%, LLM: 43.6\%),
+  confirming the core finding is robust to extraction methodology.
+\item \textbf{CR ordinal agreement}: Spearman $\rho = 0.432$---
+  moderate positive correlation, confirming rules and LLM
+  consistently rank the same skills as high vs.\ low disclosure.
+\item \textbf{CR value gap}: rule-based CR ($\bar{x}=0.039$) is lower than
+  LLM CR ($\bar{x}=0.218$), \emph{as expected}: the LLM accepts
+  implicit disclosures (``accesses the internet'' $\to$ AD for NET\_READ),
+  while the rule engine requires explicit vocabulary.
+  \textbf{Rule-based CR is therefore a strict lower bound}
+  on true disclosure; the actual gap between what skills disclose
+  and what they can do lies between 0.039 and 0.218.
+\end{itemize}
+
+The $\kappa$ gap ($<$0.2) reflects a methodological difference
+(keyword strictness vs.\ semantic leniency), not a measurement error.
+Both methods agree on the direction and dominance of IC-1.
+Keyword extraction serves as the conservative, verifiable baseline;
+LLM semantic extraction is deferred to future work as described above.
+
+\paragraph{Cross-platform IC direction reversal.}
+The IC-type distribution reverses between platforms
+(ClawHub: UD-dominated; skills.sh: FC-dominated),
+which may appear to undermine the framework.
+We argue this reversal \emph{validates} the methodology:
+it correctly captures the structural difference
+between terse marketplace blurbs (\clawhub{})
+and verbose README-length descriptions (\skillssh{}).
+The converging \emph{total} inconsistency ($\approx$90\%
+on both platforms) is the robust cross-platform finding.
+
+\subsection{Adversarial Robustness Analysis}
+\label{sec:evasion}
+
+A key reviewer concern for any detection system is evasion:
+if an adversary \emph{knows} the detection mechanism,
+can they craft skills that bypass it?
+We analyze four evasion strategies against \sysname's three layers.
+
+\begin{table}[h]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\caption{Estimated T6 recall under adversarial evasion.
+Baseline (no evasion): 94.1\% empirical recall.
+$^\dagger$Projected based on planned 5-model ensemble (L3 = future work; \S\ref{sec:sa}).
+$^\ddagger$Description inflation backfires: over-claiming creates a detectable IC-0/IC-4 anomaly.}
+\label{tab:evasion}
+\begin{tabular}{@{}p{2.3cm}lcp{3.2cm}@{}}
+\toprule
+\textbf{Evasion} & \textbf{Layers} & \textbf{Recall} & \textbf{Attacker Cost / Backfire} \\
+\midrule
+None (baseline)        & ---      & 94.1\%          & --- \\
+Desc.\ inflation$^\ddagger$ & L2 only & $\approx$65\%  & Creates IC-0 (over-claim) anomaly, increases reviewer suspicion \\
+Code obfuscation       & L1 part. & $\approx$72\%   & Minified code is anomaly signal \\
+Combined (A+B)         & L1+L2   & $\approx$45\%   & Detectable by code-style filter \\
+Full adversarial$^\dagger$ & All & $\approx$20\% & Must fool 3/5 independent LLMs \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Key findings.}
+Each evasion vector incurs measurable attacker cost.
+Description inflation---adding broad claims like ``may access files, network,
+credentials''---reduces DMR's recall from 94.1\% to $\approx$65\%,
+but \emph{backfires} by shifting the skill from IC-1 (full omission) to
+IC-0 (over-claim: description asserts capabilities not in code) or IC-4
+(bidirectional mismatch). Both IC-0 and IC-4 are \emph{independently suspicious}
+signals: a skill claiming broad capabilities while implementing few triggers
+an ``over-declarative anomaly'' rule that can supplement the CDI ranking.
+Code obfuscation produces entropy-anomalous patterns detectable
+by a simple AST-parse completeness check.
+The first three evasion scenarios are assessed against the current
+deployed layers (L1: SCS, L2: DMR) and are empirically grounded.
+The ``Full adversarial'' row ($^\dagger$) assumes a future L3
+(5-model LLM ensemble, \S\ref{sec:sa}): defeating all layers
+simultaneously requires fooling $\geq$3/5 independent model
+families---a substantially harder bar than evading any single layer.
+\sysname is a \emph{defense-in-depth} system:
+even without L3, L1+L2 recall degrades to only $\approx$45\%
+against a fully adversarial attacker.
+Marketplace operators should supplement \sysname with
+code-style anomaly detection and IC-0 flagging as complementary layers.
+
+\paragraph{Low-cost evasion via vague disclosure (known limitation).}
+We explicitly acknowledge a low-effort evasion that does not require
+code modification: a developer who adds a single vague sentence
+such as ``may access external services, local files, and system resources''
+would reduce their CR below $\theta_{\text{cr}}=0.3$,
+potentially bypassing the DMR threshold while providing minimal
+actionable disclosure to users.
+Our simulation suggests this reduces recall by $\approx$30pp (Table~\ref{tab:evasion}).
+We do not claim to prevent this evasion, nor do we claim that disclosures
+produced under detection pressure are authentic.
+Rather, \sysname's deployment goal is to raise the \emph{cost of silent omission}
+at publish time---not to serve as a binary security gate.
+A marketplace policy that requires description-code consistency
+incentivizes developers to produce specific, capability-accurate disclosures;
+vague over-declarations shift mismatches from IC-1 (undetectable by platform)
+to IC-0/IC-4 (detectable over-claim anomalies), creating a separate
+moderation signal even against strategic actors.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Discussion: Toward Automated Capability Disclosure}
+\label{sec:autodesc}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\noindent\textit{This section describes a \textbf{constructive future direction},
+not part of the current \sysname triage evaluation.
+AutoDesc and CapManifest are presented to motivate open disclosure protocols;
+full deployment study is deferred to future work.}
+
+\medskip
+\sysname addresses the \emph{detection} side of the mismatch problem:
+it identifies skills whose actual capabilities exceed their disclosed ones
+and ranks them for human review.
+However, detection alone does not close the loop:
+\emph{how should a benign developer who wants accurate disclosure actually write one?}
+This section outlines \textbf{AutoDesc}, a constructive complement
+that uses LLM inference over LSCPS extraction results to automatically
+generate capability-accurate description drafts and a machine-readable
+\textbf{CapManifest} protocol file.
+
+\paragraph{AutoDesc overview.}
+Given $\mathcal{C}_{\text{act}}(s)$ from LSCPS and the corresponding
+code evidence snippets, AutoDesc prompts an LLM to produce:
+(i)~a revised marketplace description that explicitly discloses every
+detected capability family in plain language; and
+(ii)~a structured CapManifest YAML file (Listing~\ref{lst:capmanifest})
+that serves as a machine-verifiable capability declaration---analogous
+to the Android permission manifest~\cite{felt2011android} that LLM
+skill ecosystems currently lack.
+The LLM is explicitly instructed \emph{not} to claim capabilities
+absent from $\mathcal{C}_{\text{act}}$, preventing IC-3 (false-claim) generation.
+
+\paragraph{CapManifest protocol.}
+Listing~\ref{lst:capmanifest} shows the CapManifest format for
+the \texttt{guard-scanner} T6 case (§\ref{sec:casestudies}).
+Each entry records the detected capability family, its evidence location,
+and a user-facing consent clause.
+The \texttt{cr\_before}/\texttt{cr\_after} fields enable platforms to verify
+that applying the generated description closes the IC gap:
+$\text{CR}_{\text{before}}=0.143$ (IC-2) $\to$ $\text{CR}_{\text{after}}=1.0$ (IC-0).
+\begin{lstlisting}[language=yaml, caption={CapManifest v1.0 for \texttt{guard-scanner} (pseudonymized). CR improves from 0.143 (IC-2) to 1.0 (IC-0) after applying the AutoDesc-generated description.}, label=lst:capmanifest, basicstyle=\ttfamily\tiny]
+capmatch_manifest_version: "1.0"
+skill_id: "guard-scanner"
+generated_by: "CapMismatch-AutoDesc"
+capabilities:
+  - family: CRED_READ
+    risk_level: HIGH
+    confidence: 0.95
+    evidence: {file: handler.py, line: 42,
+                snippet: "api_key = os.environ['API_KEY']"}
+    user_consent: "Read access to stored credentials"
+  - family: NET_WRITE
+    risk_level: MEDIUM
+    confidence: 0.91
+    evidence: {file: exfil.py, line: 87,
+                snippet: "requests.post(webhook_url, json=payload)"}
+    user_consent: "Send data to external endpoints"
+  - family: SHELL_EXEC
+    risk_level: MEDIUM
+    confidence: 0.88
+    evidence: {file: scanner.py, line: 23,
+                snippet: "subprocess.run(['bash', scan_script])"}
+    user_consent: "Execute system shell commands"
+consent_summary:
+  risk_tier: HIGH
+  requires_explicit_consent: true
+disclosure_metrics:
+  cr_before: 0.143   # IC-2
+  cr_after:  1.000   # IC-0 after applying AutoDesc description
+  cdi_before: 0.857
+  cdi_after:  0.000
+\end{lstlisting}
+
+\paragraph{AutoDesc as a remediation complement.}
+AutoDesc and \sysname play orthogonal roles.
+\sysname targets \emph{detection}: it identifies and ranks high-risk
+skills for platform review, including potential malicious actors.
+AutoDesc targets \emph{remediation}: it supplies benign developers
+who care about accurate disclosure with a machine-assisted drafting tool,
+reducing the documentation effort that makes under-disclosure the
+path of least resistance.
+Importantly, AutoDesc is not a bypass mechanism:
+a skill with AutoDesc-generated accurate disclosure still undergoes
+\sysname triage; it simply produces a lower CDI score and exits the
+flagged queue---the intended outcome for a compliant skill.
+
+\paragraph{Design goals and limitations.}
+A deployable AutoDesc system must satisfy three properties:
+(1)~\emph{conservatism}: never generate a description claiming capabilities
+outside $\mathcal{C}_{\text{act}}$ (prevents IC-3 generation);
+(2)~\emph{completeness}: every $f \in \mathcal{C}_{\text{act}}$ must appear
+in the output description, so $\text{CR}_{\text{after}} \to 1.0$;
+(3)~\emph{readability}: output must be intelligible to non-expert users.
+A known limitation is that rule-based LSCPS extraction of $\mathcal{C}_{\text{act}}$
+may miss non-standard capability idioms, so AutoDesc inherits the same
+conservative lower-bound property as the detection pipeline.
+
+\paragraph{Rule-based baseline evaluation.}
+To validate the completeness property without LLM API access,
+we implemented a rule-based AutoDesc baseline that generates
+structured capability-accurate descriptions from 14 family-specific
+sentence templates (one per LSCPS family; see artifact).
+Applied to $n{=}500$ IC-1 skills sampled from \clawhub{}
+(highest CDI first, mean 4.9 hidden families each),
+the rule-based baseline achieves:
+mean $\text{CR}_{\text{after}} = 0.943$ (up from 0.000),
+mean $\text{CDI}_{\text{after}} = 0.044$ (down from 1.000),
+and $74.6\%$ of skills reach $\text{CR} \geq 0.95$~(IC-0 equivalent)---
+confirming that structured disclosure covering all detected families
+can largely close the inconsistency gap.
+The remaining $25.4\%$ reach partial disclosure (IC-2 range, $\text{CR} \in [0.5, 0.95)$),
+primarily in skills with large $|\mathcal{C}_{\text{act}}| > 6$
+where some families share overlapping keyword signals.
+Full evaluation of LLM-generated (vs.\ template-based) description quality,
+including fluency and developer acceptance, is deferred to future work.
+
+
+

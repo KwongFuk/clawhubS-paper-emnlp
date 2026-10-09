@@ -1,0 +1,11 @@
+-r requirements.txt
+
+anthropic>=0.49
+numpy>=1.26
+openai>=1.68
+rank-bm25>=0.2.2
+scikit-learn>=1.5
+scipy>=1.13
+sentence-transformers>=3.4
+torch>=2.4
+transformers>=4.49

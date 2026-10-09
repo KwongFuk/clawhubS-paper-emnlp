@@ -1,0 +1,154 @@
+% sections/05_temporal_analysis.tex
+% §5: RQ2 Temporal IC Analysis
+% Restructured around IC temporal extension
+
+\section{RQ2: Temporal Inconsistency Evolution}
+\label{sec:temporal}
+
+\subsection{Experimental Setup}
+
+We construct a temporal dataset of 24,243 version transition pairs spanning 7,144 \clawhub{} skills (3.39 documented transitions per skill on average).
+
+\noindent\textbf{Exploratory note.} Temporal IC labeling (T4/T5) relies on the same
+LSCPS static extraction used for the main IC analysis; temporal labels are therefore
+\emph{proxy indicators} derived from version-history metadata, not independently verified.
+TDM recall is not included in the main composite evaluation (Table~\ref{tab:full_eval})
+because its proxy labels are not independent of the detection features.
+The findings here are reported as \emph{exploratory observations} to motivate
+future deployment with live version-controlled repositories.
+For each unique version pair $(v_i, v_{i+1})$, we compute:
+\begin{itemize}[topsep=2pt,itemsep=1pt]
+    \item \textbf{TCE} (Eq.~\ref{eq:tce}): Risk-Weighted Mismatch delta across versions;
+    \item \textbf{SDS}: fraction of newly introduced capabilities mentioned in the changelog;
+    \item \textbf{Family-level drift}: per-family CES deltas (Shell, Credential, Network, File, Agentic).
+\end{itemize}
+T4/T5 labels are \emph{heuristic risk indicators} from archived text, not verified malicious labels.
+
+\paragraph{Scope note: \clawhub{} only.}
+Temporal analysis is \clawhub{}-exclusive; \skillssh{} provides only a static snapshot
+without structured version history.
+Cross-platform static results are reported in \S\ref{sec:static} (RQ4).
+
+\subsection{Temporal IC Distribution}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/fig_ic_temporal.pdf}
+\caption{Version transition temporal IC labels on \clawhub{} ($M{=}24{,}243$ pairs).
+  T6 (confirmed malicious) transitions are shown as a separate category.}
+\label{fig:transitions}
+\end{figure}
+
+\begin{table}[h]
+\centering
+\caption{Temporal IC classification of 24,243 version transitions.
+  ``Silent expansion'' = TCE$>$0 and SDS$<$0.35.}
+\label{tab:temporal_ic}
+\scriptsize
+\begin{tabular}{@{}lrrp{3.2cm}@{}}
+\toprule
+\textbf{Label} & \textbf{Count} & \textbf{\%} & \textbf{IC meaning} \\
+\midrule
+T-Benign         & 19,131 & 78.9\% & No IC degradation \\
+T-Silent-Expand  &  1,940 &  8.0\% & TCE$>$0, SDS$<$0.35 (T4) \\
+T-Silent-Cred    &  1,136 &  4.7\% & CRED-READ silently expanded \\
+T-DocLag         &    623 &  2.6\% & Capability added, description static \\
+T-Silent-Minor   &    534 &  2.2\% & Low-risk generic drift \\
+T-Silent-Major   &    512 &  2.1\% & High-risk cap injected without disclosure \\
+T-CovertAgent    &    327 &  1.3\% & AUTONOMOUS silently added \\
+\textbf{T6-Malicious} & \textbf{40} & \textbf{0.2\%} & \textbf{Confirmed malicious injection} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Answer to RQ2.}
+\textbf{2,575 of 24,243 transitions (10.6\%)} are silent expansions
+(TCE$>$0, SDS$<$0.35).
+This figure aggregates across all temporal sub-categories in Table~\ref{tab:temporal_ic}
+(T-Silent-Expand, T-Silent-Cred, T-DocLag, T-Silent-Minor, T-Silent-Major, and T-CovertAgent)
+that satisfy the TCE$>$0, SDS$<$0.35 criterion.
+Ratio of silent to disclosed expansions: $2{,}575 : 534 = \textbf{4.8{:}1}$.
+The most silently-expanded families:
+CRED-READ (39.0\%), SHELL-EXEC (31.6\%), FILE-OPS (17.8\%).
+Median changelog for silent expansions: 3 words (``minor bug fix'').
+
+\subsection{Cumulative IC Degradation (T5)}
+
+T5 requires IC-1/IC-2 at the current version
+\emph{and} at least one silent expansion in the skill's version history.
+We find \textbf{1,376 skills} (7.8\% of all \NskillsDMR{} skills;
+19.3\% of the 7,144 skills with version history) satisfy this criterion.
+T5 skills are \textbf{4.5$\times$ more likely} to be associated with
+a T6 confirmed malicious injection than non-T5 skills
+(Fisher's exact test, $p{<}0.01$; OR\,=\,4.5, 95\%\,CI\,[1.8,\,11.2]).
+This association suggests T5 may be a useful risk indicator,
+but the proxy nature of T4/T5 labels means this cannot be treated
+as independent validation of the detection pipeline.
+
+\paragraph{Changelog word count distribution.}
+Among silently expanding transitions, the median changelog is 3 words
+(e.g., ``minor bug fix,'' ``performance update,'' ``1.0.1'').
+Only 4 of 2,575 candidate pairs feature changelogs exceeding 50 words.
+
+\paragraph{Temporal pattern.}
+Skills do not expand capabilities linearly.
+A ``plateau-and-jump'' pattern emerges:
+78\% of aggregate CES expansions occur within a single version transition
+rather than gradually over time.
+This concentration is consistent with abrupt capability change,
+though not sufficient on its own to establish malicious intent.
+
+\subsection{Version Lifecycle IC Evolution}
+\label{sec:lifecycle}
+
+A natural question is whether \emph{developers self-correct} over time:
+do skills become more transparent in later versions?
+We group transitions by the target version number $v$ into five cohorts
+and compute per-cohort IC-0 rate (consistent disclosure) and mean CR.
+
+\begin{table}[h]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\caption{IC disclosure quality across version lifecycle cohorts (24,243 transitions).
+  All cohorts are sub-sampled by version number; v1 ($N{=}21$) and v2--3 ($N{=}54$) have
+  small $N$ and should be interpreted cautiously.}
+\label{tab:lifecycle_ic}
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+\textbf{Cohort} & \textbf{N} & \textbf{IC-0\%} & \textbf{IC-1\%} & \textbf{CR} & \textbf{Silent\%} \\
+\midrule
+v1   (Initial)     & 21  & 4.8  & 61.9 & 0.221 & 0.0 \\
+v2--3 (Early)      & 54  & 7.4  & 51.9 & 0.252 & 5.6 \\
+v4--7 (Mid)        & 100 & 10.0 & 45.0 & 0.274 & \textbf{11.0} \\
+v8--15 (Mature)    & 191 & 11.0 & 55.5 & 0.313 & 0.5 \\
+v16+  (Long-lived) & 134 & 20.1 & 56.0 & 0.357 & 0.0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/fig_temporal_ic_evolution.pdf}
+\caption{IC distribution and mean CR by version cohort, with silent expansion rate.
+Silent expansions peak in the mid-lifecycle (v4--7), the period of active development
+but limited security scrutiny.}
+\label{fig:lifecycle}
+\end{figure}
+
+\paragraph{Key findings.}
+Mean CR improves slightly ($0.221 \to 0.357$) as skills age,
+suggesting limited but real developer self-correction over time.
+However, \textbf{IC-1 (Full Omission) remains the dominant IC type in all cohorts},
+including long-lived skills ($>$v16): 56\% of transitions in that cohort
+still exhibit complete under-disclosure.
+This pattern is \textbf{consistent with} IC violations being a structural ecosystem property
+rather than a developer-learning-curve artifact---though the cohort sizes
+(especially v1--v3) are small and caution is warranted in generalizing.
+
+Notably, silent capability expansions \textbf{peak at v4--7 (11\%)},
+the mid-lifecycle window where skills are actively developed
+but not yet subject to mature security scrutiny or active user review.
+This is the \emph{highest-risk window} for undetected capability injection,
+providing a deployment heuristic: skills in this version band should receive
+higher-priority review from TrustDrift's screening queue.

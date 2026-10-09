@@ -1,0 +1,77 @@
+% sections/08_related_work.tex
+
+\section{Related Work}
+\label{sec:related}
+
+\paragraph{LLM agent security.}
+Tool-augmented LLM agents~\cite{yao2023react,schick2024toolformer,significant2023autogpt}
+have created new ecosystems with unique trust assumptions~\cite{xi2023rise}.
+Prompt injection~\cite{greshake2023indirect} hijacks agent {\em input};
+our work targets the {\em supply-chain} layer where the installed skill
+itself is adversarial. Agent sandboxing~\cite{andriessen2024sandbox,ruan2024identifying},
+tool verification~\cite{liu2024toolauth}, and safety analyses~\cite{tian2024evil}
+assume descriptions accurately reflect behavior---an assumption we
+systematically invalidate across \NskillsDMR{} skills.
+The MCP standard~\cite{anthropic2024mcp}
+secures the invocation layer; we audit the disclosure layer.
+Concurrent work on tool poisoning~\cite{wu2024toolsword} and
+function-calling misuse~\cite{shi2024ehragent} motivates
+publish-time rather than per-call defenses.
+
+\paragraph{MCP and tool marketplace security.}
+The Model Context Protocol (MCP)~\cite{anthropic2024mcp} has rapidly emerged
+as a standard for LLM tool integration, but its security properties
+at the marketplace level remain underexplored.
+Concurrent work has identified MCP tool poisoning vectors~\cite{wu2024toolsword}
+where malicious tool descriptions manipulate agent behavior.
+Our work is complementary: we measure how much of the \emph{actual} capability
+surface of published tools is absent from their descriptions (CR\,=\,\ResultCR{}),
+providing the quantitative basis for arguing that MCP alone
+cannot substitute for publish-time capability auditing.
+
+\paragraph{Software supply chain.}
+Typosquatting~\cite{vu2020typosquatting,taylor2020confused}
+and dependency attacks~\cite{ohm2020backstabber,ladisa2023taxonomy}
+are well-studied in npm/PyPI.
+Our threat model differs: attacks arrive via legitimate updates
+to previously-trusted skills, analogous to
+event-stream~\cite{right2018eventstream} and node-ipc~\cite{snyk2022nodeipc}.
+We provide the first measurement of update-based injection in LLM skill ecosystems.
+The CodeArtifact security posture~\cite{lamb2022evaluating}
+offers a reference architecture; LLM skill markets currently lack equivalent controls.
+
+\paragraph{Capability disclosure and mobile permissions.}
+Android studies~\cite{felt2011android,au2012pscout,wijesekera2015android}
+show apps over-request permissions; we find the mirror image:
+skills {\em under-declare} capabilities because LLM marketplaces
+lack machine-readable manifests~\cite{bartel2012static,li2017static}.
+Dark patterns~\cite{gray2018dark} and warning fatigue~\cite{bauer2013warning}
+compound the problem.
+The EU AI Act's transparency requirements~\cite{eu2024aiact} align
+with our findings: mandatory capability disclosure for high-risk systems
+would directly address the under-declaration gap (CDI\,=\,\ResultCDI{}) we quantify.
+Unlike mobile permission studies that measure over-declaration,
+our CR/CP framework independently captures both under-disclosure and false claims.
+
+\paragraph{Static analysis and information disclosure.}
+Our regex extraction relates to Android malware
+detection~\cite{arp2014drebin} and code property
+graphs~\cite{yamaguchi2014modeling}; we use lightweight regex
+for marketplace-scale deployability (300+ patterns, \NskillsDMR{} skills, one pass).
+LLM-generated code~\cite{pearce2022asleep,sandoval2023lost}
+has elevated vulnerability rates, compounding under-disclosure
+when developers do not audit generated skill code.
+Static analysis of comment-code consistency~\cite{tan2007icomment,panthaplackel2020associating}
+is the closest prior work; we apply this lens to security-critical marketplace listings.
+
+\paragraph{Ecosystem measurement.}
+Prior measurements span npm~\cite{zimmermann2019small},
+PyPI~\cite{duan2021measuring}, Android~\cite{felt2011android},
+and voice-assistant privacy~\cite{liao2020measuring}.
+Ours is the first ecosystem-scale measurement of capability disclosure
+in LLM skill marketplaces, spanning \NskillsDMR{} skills and \ResultFilesRead{} files.
+The dual-platform design (\clawhub{} + \skillssh{}) directly addresses
+the external validity concern raised for single-platform
+supply-chain studies~\cite{ladisa2023taxonomy}:
+convergent $\approx$90\% inconsistency across two independently-designed
+markets strengthens the structural interpretation of our findings.

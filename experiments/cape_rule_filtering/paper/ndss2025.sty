@@ -1,0 +1,52 @@
+% ndss2025.sty — Minimal NDSS-compatible style
+% Based on NDSS 2024/2025 formatting guidelines:
+%   - 8.5x11 letter paper, 10pt, two-column
+%   - Margins: 1in top/bottom, 1in left/right
+%   - Column separation: 0.25in
+%   - Body text: Times New Roman 10pt
+%   - Max 10 pages excluding references
+
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{ndss2025}[2025/01/01 NDSS Symposium Style]
+
+\usepackage[letterpaper,
+            top=1in, bottom=1in,
+            left=1in, right=1in,
+            columnsep=0.25in]{geometry}
+
+\usepackage{times}
+\usepackage{helvet}
+\usepackage{courier}
+
+% Section formatting
+\usepackage{titlesec}
+\titleformat{\section}{\normalsize\bfseries}{\thesection.}{0.5em}{}
+\titleformat{\subsection}{\normalsize\bfseries\itshape}{\thesubsection}{0.5em}{}
+\titleformat{\paragraph}[runin]{\normalsize\bfseries}{}{0pt}{}[.]
+
+\titlespacing{\section}{0pt}{6pt plus 2pt minus 1pt}{3pt plus 1pt}
+\titlespacing{\subsection}{0pt}{4pt plus 2pt minus 1pt}{2pt plus 1pt}
+
+% Abstract formatting
+\renewenvironment{abstract}{%
+  \begin{center}
+    \textbf{Abstract}
+  \end{center}
+  \begin{quote}\small
+}{%
+  \end{quote}
+}
+
+% Caption formatting
+\usepackage{caption}
+\captionsetup{font=small, labelfont=bf, skip=4pt}
+
+% Tighter lists
+\usepackage{enumitem}
+\setlist{topsep=2pt, itemsep=1pt, parsep=0pt}
+
+% Header/footer for review
+\usepackage{fancyhdr}
+\pagestyle{plain}
+
+\endinput

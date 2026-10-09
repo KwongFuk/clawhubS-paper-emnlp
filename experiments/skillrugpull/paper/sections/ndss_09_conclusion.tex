@@ -1,0 +1,46 @@
+% sections/ndss_09_conclusion.tex  — NDSS 2027
+
+We presented \sysname, the first large-scale measurement of
+capability-description inconsistency in LLM agent skill marketplaces,
+and \cape, an empirical validation framework demonstrating
+the real-world exploitability of the identified gaps.
+
+Our analysis of \NskillsCH \clawhub skills reveals that \ICone
+completely omit security-sensitive capabilities---shell execution,
+credential access, file deletion, and data exfiltration---from visible
+descriptions, yielding a mean Capability Recall of \MeanCR{}
+(Cohen's $\kappa = \IAAsink$ inter-annotator agreement on ground truth).
+This transparency failure is not latent risk.
+\cape validates all \NpairsTotal source-sink pairs against real OpenClaw agents.
+Under the pre-defined intent-to-treat metric (counting \NTimeout{} infrastructure
+timeouts as failures), \NpairsSuccessITT/\NpairsTotal = \PairsSuccessRateITT{} succeed.
+Under the completed-run metric (conditioned on agent returning a response),
+\NpairsSuccessCR/\NpairsCompletedRun = \textbf{\PairsSuccessRateCR}
+(95\% CI: \CICRlo--\CICRhi), with shell-execution sinks exploited at
+\ShellSuccessRate{} (\NShellCompleted/\NShellCompleted{} completed pairs).
+Only \NRefusal{} pairs (3.2\%) produce explicit agent refusals,
+and these refusals are stochastic---the same task type succeeds in
+67--100\% of other pairs---indicating the absence of a consistent safety policy.
+
+Three structural findings stand out beyond the aggregate numbers.
+First, the agent's safety policy is heuristic-based and inconsistently applied:
+shell command execution via injected context is completely unguarded,
+while direct memory-modification requests are occasionally refused
+without a stable policy threshold.
+Second, all three tested payload families (P1: \texttt{go vet}, P2: \texttt{node verify.js},
+P3: \texttt{cat README}) produce comparable success rates,
+confirming that the vulnerability is in the agent's trust model,
+not in any property of a specific command syntax.
+Third, the 64 infrastructure timeouts have a single root cause
+(LLM context compaction at high prompt token usage)---
+a measurement challenge, not an agent defense---and are being retried.
+
+LLM skill marketplaces are operating on an honor system for
+capability disclosure. As agent autonomy expands, this gap produces
+compounding risk. We call on platform operators to adopt
+machine-readable capability manifests, publish-time screening,
+and consistent capability-based runtime policies as a minimum response.
+Our tooling and dataset are released to facilitate this work.
+
+\paragraph{Acknowledgments.}
+Omitted for anonymous review.

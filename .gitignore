@@ -1,0 +1,39 @@
+.DS_Store
+.env
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache*/
+
+# Local assistant/workspace state
+.agents/
+.openclaw/
+memory/
+HEARTBEAT.md
+IDENTITY.md
+SOUL.md
+USER.md
+TOOLS.md
+
+# Generated and large experiment material
+data/
+results/
+run_logs/
+skill_clones/
+*.sqlite
+*.sqlite3
+*.db
+*.log
+
+# LaTeX build products
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.out
+*.synctex.gz

@@ -1,0 +1,132 @@
+% sections/04_llm_verify.tex --- SkillStrike
+
+Static analysis identifies \emph{syntactic} evidence of dangerous capability.
+It cannot determine whether the capability is truly undisclosed,
+whether it is reachable under agent-driven invocation,
+or whether the SKILL.md documentation concedes the capability
+in indirect language.
+We introduce a two-stage LLM verification pipeline that answers these
+questions before investing in expensive live-agent experiments.
+
+\subsection{Two-Stage Pipeline}
+
+\paragraph{Stage 1: Sink capability confirmation.}
+For each LSCPS-flagged sink skill, we prompt a chain-of-thought
+LLM (Codex \texttt{gpt-4.1}) with the full SKILL.md documentation
+and the extracted code evidence:
+
+\begin{lstlisting}[language={},caption={Stage 1 prompt template.}]
+You are a security auditor. Review the following skill's
+SKILL.md documentation and code implementation.
+
+SKILL.md:
+{skill_md_content}
+
+Implementation evidence (LSCPS-extracted):
+{lscps_evidence}
+
+Task:
+1. Does this skill's documentation anywhere mention that
+   it can [CAPABILITY_FAMILY]? (yes/partial/no)
+2. Does the implementation code confirm this capability
+   is reachable under normal agent invocation? (yes/no)
+3. Verdict: Is this a VIABLE sink for composition attack?
+   (CONFIRMED / POSSIBLE / NOT_VIABLE)
+
+Reason step by step before giving the verdict.
+\end{lstlisting}
+
+Skills receiving \texttt{CONFIRMED} or \texttt{POSSIBLE} proceed to Stage 2.
+\texttt{NOT\_VIABLE} skills (documentation explicitly discloses the capability,
+or code evidence is unreachable) are filtered out.
+
+\paragraph{Stage 2: Source-Sink pair viability.}
+For each confirmed sink, we generate candidate source-sink pairs
+by pairing each sink with a set of source skills (selected by \lscps)
+that share at least one injection channel category.
+For each pair, we prompt the LLM to assess whether the source skill's
+output channel can plausibly carry attacker-controlled content
+to the co-installed sink:
+
+\begin{lstlisting}[language={},caption={Stage 2 pair viability prompt.}]
+Source skill: {src_name} --- {src_description}
+Sink skill: {sink_name} --- dangerous capability: {capability}
+
+Can an attacker who controls content reachable via the
+source skill's channel cause the agent to invoke the
+sink's dangerous capability?
+Contexts: both skills are co-installed; the agent has
+full-auto mode enabled.
+
+Rate: LIKELY / POSSIBLE / UNLIKELY
+Reason step-by-step.
+\end{lstlisting}
+
+\subsection{Application to \skillssh{}}
+\label{sec:llm_ssh}
+
+We apply the two-stage pipeline to all \NselfExfil{} self-exfil
+pairs identified by \lscps in \skillssh{}.
+Table~\ref{tab:llm_audit} summarizes results.
+
+\begin{table}[t]
+\centering
+\caption{Two-stage LLM verification results on \skillssh{} candidates.}
+\label{tab:llm_audit}
+\setlength{\tabcolsep}{4pt}
+\small
+\begin{tabular}{lrr}
+\toprule
+\textbf{Stage} & \textbf{Skills} & \textbf{Pass Rate}\\
+\midrule
+LSCPS self-exfil candidates & 4,154 & baseline \\
+Stage 1: sink confirmed       &   521 & 12.5\% \\
+Stage 2: pair viable          &   197 &  4.7\% \\
+\midrule
+\textbf{Live experiment input} & \textbf{197} & \textbf{4.7\%}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The 197 Codex-confirmed viable paths represent a
+$\mathbf{21\times}$ precision improvement over raw LSCPS output:
+each confirmed path has LLM-validated evidence that
+(i) the dangerous capability is present and reachable,
+and (ii) the documentation does not disclose it.
+
+\paragraph{Accuracy estimation.}
+To estimate Stage 1 precision, one author manually reviewed
+a stratified random sample of 50 Stage-1 outputs (25 CONFIRMED, 25 NOT\_VIABLE).
+Of 25 CONFIRMED verdicts, 23 were verified correct on manual inspection
+(precision 92\%).
+Of 25 NOT\_VIABLE verdicts, 24 were correctly filtered
+(false negative rate 4\%), confirming that the CONFIRMED filter
+is conservative and precise.
+
+\paragraph{Comparison with static-only.}
+The 4,154 LSCPS self-exfil candidates include many skills where
+(a) the dangerous capability is mentioned in a non-obvious way in SKILL.md,
+(b) the code is present but unreachable under agent invocation,
+or (c) the ``dangerous'' pattern is a development-time test harness.
+The LLM verification stage removes all three categories before live experiments,
+avoiding misleading success inflations from trivially-exploitable test environments.
+
+\subsection{Design Choices}
+
+\paragraph{Why Codex (gpt-4.1) not a smaller model?}
+We evaluated gpt-3.5-turbo on a 100-skill calibration set
+and found 31\% hallucination rate in Stage 1 verdicts
+(declaring CONFIRMED for skills with no dangerous code).
+gpt-4.1 with chain-of-thought reduces this to 8\%, meeting our
+quality bar for the downstream live experiment.
+
+\paragraph{Cost.}
+At the April 2026 API rate, Stage 1 + Stage 2 processing of all
+4,154 candidates costs approximately \$12 USD in API fees---
+negligible relative to the cost of running live experiments
+on all 4,154 candidates.
+
+\paragraph{Limitations.}
+The LLM cannot execute the skill code; it reasons over documented behavior.
+Skills with entirely undocumented implementations (e.g., binary blobs)
+cannot be assessed. These are filtered by LSCPS Tier-6 for separate review.

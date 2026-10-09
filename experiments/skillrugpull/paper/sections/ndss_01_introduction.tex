@@ -1,0 +1,122 @@
+% sections/ndss_01_introduction.tex
+% NDSS 2027 — CapMismatch Introduction
+% Target: 1.5 columns / ~750 words
+
+The emergence of LLM agent skill marketplaces---platforms such as
+\clawhub (\NskillsCH skills, $>$2.1M installs) and skills.sh that let
+developers publish installable tools extending language model
+capabilities---represents a new class of software supply chain~\cite{xi2023rise,schick2024toolformer}.
+Unlike traditional package managers~\cite{zimmermann2019small},
+skills operate with \emph{NLP-driven ambient authority}:
+once installed, a skill executes on behalf of the user,
+reading files, executing shell commands, accessing credentials,
+and sending network requests, often without per-action confirmation
+or OS-level sandboxing.
+
+Critically, the \emph{only} capability disclosure mechanism available
+to users and platform operators is the skill's natural-language description.
+There is no machine-readable permission manifest, no capability whitelist,
+and no runtime sandbox to fall back on when the description is inaccurate.
+This creates a fundamental \emph{compositional security failure}:
+when users combine multiple skills---a web-search source with a
+development-utility sink, an email fetcher with a memory manager---
+the aggregate set of capabilities the agent can exercise
+may far exceed anything disclosed in any individual skill's description.
+Neither the user nor the platform can anticipate the attack surface
+created by each unique skill combination.
+
+\paragraph{Our contributions.}
+We make four contributions:
+
+\begin{enumerate}[leftmargin=*, label=\textbf{C\arabic*.}]
+
+\item \textbf{Measurement at scale.}
+We analyze all \NskillsCH skills in \clawhub using
+\lscps (Layered Structured Capability Pattern Search),
+a rule-based static analysis pipeline for extracting security-sensitive
+capabilities from skill implementation code.
+We find that \ICone of skills with dangerous capabilities
+\emph{completely omit} them from their visible descriptions
+(mean Capability Recall $\overline{\text{CR}} = \MeanCR$),
+constituting an ecosystem-wide transparency failure.
+
+\item \textbf{IC taxonomy.}
+We introduce the Inconsistency Class (IC) taxonomy---IC-0 through IC-4---that
+characterizes four structural patterns of capability-description mismatch,
+from full omission (IC-1, 75.8\%) to false claims (IC-3, 0.4\%).
+This taxonomy provides the first systematic vocabulary for reasoning
+about skill transparency.
+
+\item \textbf{Compositional attack surface validation (CAPE).}
+We demonstrate that capability opacity does not merely create theoretical risk;
+it creates a \emph{measurable, exploitable compositional attack surface}.
+When any source skill (web search, email, calendar, file reader, memory,
+browser automation, database connector) is co-installed with an IC-1 sink
+skill, the combination constitutes an attack surface: an adversary
+who can influence the content delivered by the source skill can trigger
+the sink's undisclosed dangerous capability without any
+additional platform access.
+This attack surface arises from the composition itself---
+neither source nor sink is individually malicious,
+but together they expose capabilities the user never consented to.
+
+We operationalize this surface through \cape (Compositional Attack Pair Evaluator),
+testing \NpairsTotal unique source-sink pairs spanning seven injection-channel
+categories (C1: LLM context, C2: filesystem, C3: agent memory, C5: database,
+C9: boot hook / cron, C13: network) on a real OpenClaw /
+\texttt{gpt-5.3-codex} agent platform.
+Each source skill is individually registered as an
+identity-spoofing MCP server mirroring the real skill's name and tool schema,
+modeling the realistic supply-chain threat of a malicious clone skill.
+We report two pre-defined metrics:
+\textbf{ITT}: \NpairsSuccessITT/\NpairsTotal = \ITTrate\% (95\% CI: \ITTlo--\ITThi\%),
+counting infrastructure timeouts as failures;
+\textbf{completed-run}: \NpairsSuccessCR/\NpairsCRDenom = \CRrate\%
+(95\% CI: \CRlo--\CRhi\%)
+conditioned on pairs where the agent returned a response.
+Side effects include shell command execution, file deletion,
+cron backdoor installation, cross-session memory poisoning,
+process termination, wallet exfiltration, and privilege escalation.
+33/33 tested shell-execution sink pairs succeed (completed-run: 100\%),
+revealing \emph{no consistent runtime defense} against this attack class.
+
+\item \textbf{Temporal analysis.}
+We track 24,248 version transitions in \clawhub and find that dangerous
+capabilities are silently introduced in updates with no description change (\Tsixrecall recall at Tier~6).
+Platform scanners detect 0\% of these transitions.
+
+\end{enumerate}
+
+\paragraph{Scope and novelty vs. prompt injection.}
+Our work is related to but distinct from prompt injection
+attacks~\cite{greshake2023indirect,perez2022ignore}.
+Prompt injection studies \emph{the manipulation of individual inputs}
+to produce unsafe agent behavior; we study
+\emph{the compositional attack surface created by installing
+combinations of skills with undisclosed capabilities}.
+The distinction is architectural:
+our attack requires no crafted user input and no runtime adversarial access.
+The attack surface exists the moment a dangerous IC-1 sink skill
+is installed alongside any source skill---it is a \emph{structural}
+vulnerability of the skill composition, not an input-validation failure.
+This means existing prompt-injection defenses (input sanitization,
+constrained decoding, system-prompt hardening) are \emph{not applicable}:
+the dangerous capability $\kappa$ is invoked through the agent's
+normal, intended tool-use workflow, with attacker-influenced content
+arriving through a legitimate, already-trusted source channel.
+
+\paragraph{Ethical considerations.}
+All experiments were conducted in fully isolated environments
+with no impact on real users, external services, or production systems.
+Skill identifiers used in this paper are real ClawHub skill names
+included to enable reproducibility; no exploit code is released.
+We have privately notified the ClawHub platform operators of our findings.
+
+\paragraph{Paper organization.}
+\S\ref{sec:background} presents the threat model.
+\S\ref{sec:taxonomy} introduces the IC taxonomy.
+\S\ref{sec:measurement} reports the large-scale measurement.
+\S\ref{sec:cape} presents the \cape attack validation.
+\S\ref{sec:temporal} analyzes version-update risks.
+\S\ref{sec:discussion} discusses limitations and defenses.
+\S\ref{sec:related} situates our work.

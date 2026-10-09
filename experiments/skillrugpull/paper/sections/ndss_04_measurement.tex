@@ -1,0 +1,87 @@
+% sections/ndss_04_measurement.tex  — NDSS 2027
+
+\subsection{LSCPS: Static Capability Extraction}
+
+\lscps (Layered Structured Capability Pattern Search) is a
+rule-based static analysis pipeline that scans all skill artifact
+files---Python/JS/shell code, SKILL.md instructions,
+dependency manifests, and agent config files---for 300+
+regex patterns organized into 14 security-sensitive capability families.
+Patterns operate on parsed AST nodes where available
+(Python \texttt{ast}, \texttt{esprima}) and raw text for shell scripts.
+\lscps is intentionally conservative: a pattern match contributes
+to $\mathcal{C}_{\text{act}}$ only if it appears in executable
+or instruction contexts, not in comments or example strings.
+This preserves high precision at the cost of recall,
+making all IC rates \emph{lower bounds}.
+
+\subsection{Corpus and Results}
+\label{sec:meas_results}
+
+We analyze all \NskillsCH skills in \clawhub (March 2026 snapshot).
+
+\begin{table}[t]
+\centering
+\caption{IC type distribution across \NskillsCH \clawhub skills.
+  Pct.\ over skills with $\mathcal{C}_{\text{act}} \neq \varnothing$.}
+\label{tab:ic_dist}
+\small
+\begin{tabular}{llrr}
+\toprule
+\textbf{Type} & \textbf{Description} & \textbf{Count} & \textbf{\%}\\
+\midrule
+IC-1 & Full omission  & 13,975 & 75.8\%\\
+IC-2 & Partial omission & 2,507 & 13.6\%\\
+IC-4 & Bidirectional  &   535 &  2.9\%\\
+IC-3 & False claim    &    74 &  0.4\%\\
+IC-0 & Accurate       &    74 &  0.4\%\\
+\midrule
+None & No dangerous cap.\ detected & 1,278 & 6.9\%\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{IC-1 dominates}: 75.8\% of skills with dangerous detected
+capabilities entirely omit them from descriptions.
+Only 0.4\% achieve accurate disclosure.
+The mean Capability Recall $\overline{\text{CR}} = \MeanCR$ indicates
+that descriptions mention fewer than one in twenty-three
+detected capability signals.
+Mean CDI $= \MeanCDI$ confirms that nearly all skills have at least
+one misrepresented capability family.
+
+\paragraph{Capability family breakdown.}
+The most commonly hidden capability families are:
+\texttt{SHELL\_EXEC} (hidden in 38.2\% of skills with the capability),
+\texttt{FILE\_WRITE} (29.1\%), and \texttt{NETWORK\_EXFIL} (21.4\%).
+These three families account for 72\% of the CAPE-validated dangerous sinks (\S\ref{sec:cape}).
+
+\paragraph{Confirmed dangerous sinks.}
+From the IC-1 and IC-2 populations, we identify 329 candidate
+dangerous sink skills via LSCPS severity scoring.
+Human verification of the top 125 yields the \NpairsTotal confirmed
+sinks used in \cape (\S\ref{sec:cape}).
+Verification assessed whether the detected capability was
+(a) actually present in the implementation and
+(b) triggerable by agent-side tool invocation without out-of-band
+machine access.
+To assess labeling reliability, two annotators independently verified
+a stratified random sample of 40 sinks (32\% of the verified set).
+Inter-annotator agreement (Cohen's $\kappa$) was \textbf{0.87} on
+binary dangerous/not-dangerous classification,
+indicating near-perfect agreement and supporting the reliability
+of the full 125-sink ground truth set.
+
+\subsection{Cross-Platform Validation}
+
+To confirm findings generalize beyond \clawhub,
+we analyze 44 skills from skills.sh---an independent, Europe-based
+LLM skill marketplace with a different operator and user base---using
+the same \lscps pipeline with no parameter changes.
+40/44 (90.9\%) exhibit IC-1 or IC-2,
+consistent with our primary corpus.
+The cross-platform consistency rules out ClawHub-specific effects
+and suggests the transparency gap is a structural property of
+current skill marketplace designs, not an artifact of any single platform's policies.
+Note that this paper's quantitative claims (IC-1 = 75.8\%, CR = 0.042)
+are scoped to \clawhub; cross-platform rates serve as directional confirmation only.

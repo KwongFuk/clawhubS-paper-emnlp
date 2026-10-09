@@ -1,0 +1,63 @@
+% sections/ndss_08_related.tex  — NDSS 2027
+
+\paragraph{Prompt injection.}
+Greshake \etal~\cite{greshake2023indirect} introduce indirect prompt injection
+and demonstrate that LLM agents can be manipulated through
+attacker-controlled content in retrieved documents.
+Our work complements this: we show that when dangerous sink capabilities
+are undisclosed, even a user who is aware of prompt injection
+cannot protect themselves---they cannot know which installed skills
+can be weaponized as sinks.
+Recent work on multi-agent injection~\cite{wu2024autogen}
+and tool-call hijacking~\cite{debenedetti2024agentdojo}
+further establishes the attack surface; we provide the first
+marketplace-scale measurement of the exposed capability surface.
+
+Table~\ref{tab:injection_comparison} formally contrasts our threat model
+with classical prompt injection and plugin-level attacks:
+
+\begin{table}[h]
+\centering
+\caption{Source-sink composition attack vs.\ related threat models.}
+\label{tab:injection_comparison}
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{lllll}
+\toprule
+ & \textbf{Classic PI} & \textbf{Plugin atk} & \textbf{This work} \\
+\midrule
+Attacker controls & Input & Plugin code & Source skill output \\
+Exploited gap & Model trust & Code execution & Capability omission \\
+Requires runtime & Yes & Yes & No (install-time) \\
+User can prevent? & Careful inputs & Vetted plugins & Not without disclosure \\
+Sink needed? & No & No & Yes (IC-1 skill) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Mobile app permission analysis.}
+Extensive work on Android permissions~\cite{felt2011android,au2012pscout}
+and privacy policy consistency~\cite{andow2019policylint,bui2021consistency}
+motivated our methodology.
+Liao \etal~\cite{liao2020measuring} measure over-privilege in Alexa skills
+using a difference matrix approach; we adapt this to LLM agent marketplaces
+where the permission model is replaced by natural-language descriptions.
+Key differences: skills have richer implementation code (not just intents),
+can execute arbitrary shell commands, and operate with full OS-level authority.
+
+\paragraph{Software supply chain attacks.}
+Ohm \etal~\cite{ohm2020backstabber} and Ladisa \etal~\cite{ladisa2023taxonomy}
+taxonomy malicious packages in npm/PyPI.
+LLM skill supply chain attacks differ in that the malicious payload
+delivery mechanism is NLP-mediated: the LLM decides whether to call
+a tool based on context, not static control flow.
+This makes both detection (static analysis alone is insufficient)
+and exploitation (prompt injection enables remote triggering) qualitatively different.
+
+\paragraph{LLM agent security.}
+Recent work studies jailbreaking~\cite{wei2023jailbroken},
+tool misuse~\cite{ruan2024identifying},
+and multi-agent trust~\cite{ju2024flooding}.
+\sysname focuses on the marketplace supply chain rather than
+the agent runtime---the attack surface created before any
+user interaction, at skill install time.

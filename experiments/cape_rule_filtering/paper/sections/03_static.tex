@@ -1,0 +1,175 @@
+% sections/03_static.tex --- SkillStrike
+
+We present \lscps (Layered Structured Capability Pattern Search),
+a static analysis pipeline for identifying dangerous source-sink pairs
+in skill marketplace corpora.
+\lscps requires no execution, no labeling, and no LLM queries;
+it operates entirely on skill source code and documentation files.
+
+\subsection{Design Principles}
+
+\lscps is designed around three principles:
+\textbf{P1 (Precision over recall):}
+we prefer to miss obfuscated dangerous calls than to flood operators
+with false positives, so every pattern requires direct syntactic evidence.
+\textbf{P2 (Multi-file coverage):}
+real skills distribute logic across SKILL.md, implementation scripts,
+and configuration files; \lscps analyzes all files in the skill package.
+\textbf{P3 (Layered filtering):}
+raw matches pass through six tiers of descending alarm rate
+(Tier-1: benign SDK call; Tier-2: sensitive API, no destination;
+Tier-3: external destination; Tier-4: credential-adjacent path;
+Tier-5: compound dangerous pattern; Tier-6: high-confidence dangerous)
+enabling tunable precision-recall tradeoffs for different operators.
+
+\subsection{Sink Pattern Library (K1--K5)}
+\label{sec:sink_patterns}
+
+\lscps implements a total of \NpatternsLSCPS{}+ regex patterns:
+\textbf{250+\ sink patterns} (K1--K5, catalogued in Table~\ref{tab:sink_families})
+organized into 14 sub-families, plus \textbf{50+\ source patterns} (C1--C5)
+for identifying injection-channel skills.
+Table~\ref{tab:sink_families} reports counts for sink patterns only.
+
+\begin{table}[t]
+\centering
+\caption{Sink capability families (K1--K5) detected by \lscps.
+  $N_{\rm pat}$ = sink regex patterns per family
+  (source patterns, total 50+, are not listed here).}
+\label{tab:sink_families}
+\setlength{\tabcolsep}{4pt}
+\small
+\begin{tabular}{lllr}
+\toprule
+\textbf{Family} & \textbf{Code} & \textbf{Representative Patterns} & $N_{\rm pat}$\\
+\midrule
+Shell exec     & K1 & \texttt{exec(}, \texttt{subprocess.run}, \texttt{os.system} & 67 \\
+Filesystem     & K2 & \texttt{os.remove}, \texttt{shutil.rmtree}, credential read & 48 \\
+Network exfil  & K3 & \texttt{requests.post}, \texttt{curl}, WebSocket send & 55 \\
+Agent memory   & K4 & memory-store write, CLAUDE.md patch, context inject & 41 \\
+Persistence    & K5 & \texttt{crontab}, boot script write, systemd unit & 39 \\
+\midrule
+\textbf{Sink total} & & & \textbf{250} \\
+\textbf{Source total (C1--C5)} & & & \textbf{50+} \\
+\textbf{Grand total} & & & \textbf{300+} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{K1: Shell execution.}
+Matches direct OS command invocation regardless of the calling abstraction:
+Python (\texttt{subprocess}, \texttt{os.system}, \texttt{pty}),
+JavaScript (\texttt{child\_process.exec}, \texttt{execa}),
+and shell scripts (\texttt{eval}, \texttt{bash -c}).
+Framework-level wrappers (\eg Langchain \texttt{BashTool}) are also matched.
+
+\paragraph{K2: Filesystem capability.}
+Targets credential-adjacent file operations: deletion of
+\texttt{.env}, \texttt{*.token}, \texttt{id\_rsa},
+or SSH config files; arbitrary write to parent directories;
+and recursive directory removal near credential paths.
+
+\paragraph{K3: Network exfiltration.}
+Targets outbound data posting to third-party endpoints:
+\texttt{requests.post} / \texttt{fetch} with non-localhost destinations,
+WebSocket sends carrying file contents, and
+hardcoded or config-driven webhook URLs.
+
+\paragraph{K4: Agent memory.}
+Targets cross-session memory stores used by MCP-compatible agents:
+writes to CLAUDE.md / HOT\_MEMORY.md-style persistent memory files,
+\texttt{mcp\_memory} or \texttt{knowledge\_graph} write operations,
+and context-injection via shared session stores.
+
+\paragraph{K5: Persistence.}
+Targets mechanisms that survive agent session restart:
+crontab installation, LaunchAgent/systemd unit creation,
+BOOT.md / rc-file modification,
+and startup script write operations.
+
+\subsection{Source Pattern Library (C1--C5)}
+
+Source patterns identify skills whose primary function is to
+fetch or aggregate external content:
+\textbf{C1 (LLM context)}: web search (\texttt{tavily}, \texttt{brave}, \texttt{serper}),
+browser automation (\texttt{playwright}, \texttt{puppeteer}), RSS, news API;
+\textbf{C2 (Filesystem)}: local file read, \texttt{grep}, \texttt{find};
+\textbf{C3 (Memory)}: cross-session memory read, e.g., \texttt{memory.search};
+\textbf{C4 (Network)}: inbound API data (email via IMAP/Graph API, calendar);
+\textbf{C5 (Persistence)}: scheduled data fetch, boot-triggered reader.
+
+\subsection{Results: Attack Surface Discovery}
+\label{sec:lscps_results}
+
+\paragraph{\clawhub corpus.}
+We apply \lscps to all \NskillsCH{} \clawhub skills (March 2026 snapshot).
+Each skill's full repository (SKILL.md, implementation scripts,
+configuration files) is fetched and scanned.
+Table~\ref{tab:lscps_ch} summarizes the output.
+
+\begin{table}[t]
+\centering
+\caption{\lscps results on \NskillsCH{} \clawhub skills.}
+\label{tab:lscps_ch}
+\setlength{\tabcolsep}{4pt}
+\small
+\begin{tabular}{lrr}
+\toprule
+\textbf{Category} & \textbf{Skills} & \textbf{Fraction}\\
+\midrule
+Source skills (C1--C5)         & \NsrcCH{} & 83\% \\
+Sink skills, any K family      &  \NsinkCH{} & 25.5\% \\
+Self-exfil (source\,$\cap$\,sink) & 1,054 & 5.7\% \\
+\midrule
+\multicolumn{3}{l}{\textit{Sink breakdown by family:}}\\
+\quad K1 (Shell exec)          &  2,601 & 55.3\% \\
+\quad K2 (Filesystem)          &    971 & 20.7\% \\
+\quad K3 (Network exfil)       &    663 & 14.1\% \\
+\quad K4 (Agent memory)        &    344 &  7.3\% \\
+\quad K5 (Persistence)         &    120 &  2.5\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Set membership clarification.}
+All counts are mutually non-exclusive labels over the \NskillsCH{} corpus:
+a skill may match source patterns (C1--C5), sink patterns (K1--K5), both, or neither.
+Specifically:
+\emph{Source skills} (\NsrcCH, 83\%) = skills with $\geq 1$ C1--C5 pattern;
+\emph{Sink skills} (\NsinkCH, 25.5\%) = skills with $\geq 1$ K1--K5 pattern;
+\emph{Self-exfil intersection} (1,054, 5.7\%) = skills matching both conditions,
+\ie $\mathcal{S}_{\rm src} \cap \mathcal{S}_{\rm sink}$.
+The intersection exists because a skill can both fetch external content (source role)
+and implement a dangerous operation (sink role) in the same codebase---
+these are the most immediately exploitable skills and form the self-exfil candidate pool.
+The remaining 14,495 skills match neither pattern.
+In the $S_{\rm src} \times S_{\rm sink}$ cross-product,
+the theoretical attack surface is $\approx 71.9\mathrm{M}$ skill-pair combinations;
+the 1,054 self-exfil skills are the subset requiring only one install, not two.
+
+\paragraph{Tier-6 high-confidence dangerous skills.}
+At Tier-6 (highest-alarm) threshold,
+34 skills match patterns consistent with confirmed malicious behavior.
+These 34 skills were subsequently identified as malicious
+by an independent security researcher's review,
+validating \lscps's Tier-6 precision.
+Critically, the \clawhub platform's built-in scanner detected
+\textbf{0 of these 34 skills}---a 0\% recall rate.
+
+\paragraph{Cross-platform.}
+Applied to a 1,000-skill stratified sample from \skillssh{}
+(randomized across star counts and install ages),
+\lscps identifies \NpatternsLSCPS{}+ sink patterns in 88\% of skills
+with shell-executing implementation code---
+consistent with the \clawhub distribution and supporting the claim
+that the attack surface is platform-agnostic.
+
+\subsection{Design Limitations}
+
+\lscps is a syntactic lower bound: it misses obfuscated calls
+(base64-encoded strings, dynamic import), dynamically constructed
+shell commands, and C-extension-based dangerous operations.
+Reported dangerous capability counts are
+\emph{conservative underestimates}.
+The LLM verification stage (\S\ref{sec:llm}) addresses some of these
+gaps by reasoning over documentation and behavioral intent.

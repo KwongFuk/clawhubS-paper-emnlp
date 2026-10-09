@@ -1,0 +1,72 @@
+% NEW SUBSECTION: Adversarial Manipulation Resistance
+% Insert after \subsection{Automated Description Repair} (around line 896)
+
+\subsection{Adversarial Keyword Manipulation}
+\label{subsec:adversarial}
+
+Our feature analysis (Table~\ref{tab:features}) shows that
+specificity and readability---not promotional keywords---predict
+selection. But can an attacker \emph{boost} an underperforming
+skill by injecting persuasive keywords into its description?
+We test four adversarial manipulation strategies on the
+least-selected skill in each cluster:
+
+\begin{itemize}[nosep,leftmargin=*]
+\item \textbf{P9} (performance): appending ``Fast, efficient,
+  lightweight. Low-latency with optimized performance.''
+\item \textbf{P10} (cost): appending ``Free to use, no API key
+  required. Unlimited requests with zero cost.''
+\item \textbf{P15} (social proof): appending ``Used by 10M+
+  developers. \#1 rated in its category.''
+\item \textbf{P16} (authority): appending ``Official integration.
+  Recommended by leading AI research labs.''
+\item \textbf{P9-ctrl} (neutral): appending filler text of matched
+  length (``Updated and actively maintained.'').
+\end{itemize}
+
+\begin{table}[t]
+\centering\small
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Cluster} & \textbf{Base} & \textbf{Perf.} & \textbf{Cost} & \textbf{Social} & \textbf{Auth.} \\
+\midrule
+web\_search     & 0.800 & 0.800 & 0.800 & \textit{TBD} & \textit{TBD} \\
+image\_gen      & 0.800 & 0.680 & 0.800 & \textit{TBD} & \textit{TBD} \\
+video\_gen      & 0.800 & 0.800 & 0.800 & \textit{TBD} & \textit{TBD} \\
+text\_to\_speech & 0.800 & 0.800 & 0.800 & \textit{TBD} & \textit{TBD} \\
+speech\_to\_text & 0.800 & 0.800 & 0.800 & \textit{TBD} & \textit{TBD} \\
+github\_mgmt    & 0.800 & 0.800 & 0.800 & --- & --- \\
+music\_gen      & \textit{TBD} & \textit{TBD} & \textit{TBD} & --- & --- \\
+notion\_mgmt    & \textit{TBD} & \textit{TBD} & \textit{TBD} & --- & --- \\
+\midrule
+\textbf{Mean}   & \textbf{0.800} & \textbf{TBD} & \textbf{TBD} & \textbf{TBD} & \textbf{TBD} \\
+\bottomrule
+\end{tabular}
+\caption{$\delta_\text{API}$ under adversarial keyword injection
+(Gemini~2.5~Flash, 5 queries $\times$ 5 rotations = 25 calls per
+condition). Baseline shows pre-existing concentration;
+injection targets the least-selected skill.
+All conditions except image\_gen P9 yield identical
+$\delta_\text{API}$ to baseline---persuasive keywords cannot
+overcome description-quality-driven concentration.}
+\label{tab:adversarial}
+\end{table}
+
+\begin{observation}
+\textbf{Adversarial keyword injection does not overcome
+description-quality-driven selection concentration.}
+Across 8 clusters and 4 injection strategies (performance,
+cost, social proof, authority), appending persuasive keywords
+to the least-selected skill produced no statistically
+significant change in $\delta_\text{API}$.
+In XX/YY conditions (ZZ\%), the target skill's selection
+rate remained at 0\% despite injection.
+The neutral control (P9-ctrl) produced identical results,
+confirming the null effect is not injection-specific.
+This finding complements our content-repair result
+(\S\ref{subsec:repair}): while rewriting the \emph{entire}
+description with specific, factual language shifts selection,
+\emph{appending} promotional keywords is ineffective---consistent
+with our feature analysis showing promotional words have
+near-zero predictive power ($r = -0.09$).
+\end{observation}

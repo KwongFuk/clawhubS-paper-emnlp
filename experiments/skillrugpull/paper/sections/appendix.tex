@@ -1,0 +1,231 @@
+% sections/appendix.tex
+% Optional appendix (not counted in body page limit)
+
+\section{Ranking Effectiveness: Precision at $K$}
+\label{app:patk}
+
+\begin{table}[h]
+\centering
+\caption{Precision at $K$ for the composite ranking.
+  Lift = P@$K$ / random baseline (34/\NskillsDMR{} $\approx0.49\%$).}
+\label{tab:patk}
+\small
+\begin{tabular}{@{}rcccr@{}}
+\toprule
+\textbf{$K$} & \textbf{T6 found} & \textbf{P@$K$} & \textbf{Recall} & \textbf{Lift} \\
+\midrule
+ 10 & 1  & 0.100 & 2.9\%  & 20.3$\times$ \\
+ 20 & 3  & 0.150 & 8.8\%  & 30.5$\times$ \\
+ 50 & 4  & 0.080 & 11.8\% & 16.3$\times$ \\
+100 & 4  & 0.040 & 11.8\% & 8.1$\times$ \\
+200 & 9  & 0.045 & 26.5\% & 9.1$\times$ \\
+500 & 14 & 0.028 & 41.2\% & 5.7$\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{LSCPS Keyword Bank}
+\label{app:lscps}
+
+Table~\ref{tab:lscps_kw} lists representative regex patterns for each
+\lscps{} capability family used in our static capability extractor.
+The full bank contains 300+ patterns across 14 capability families.
+
+\begin{table}[h]
+\centering
+\caption{LSCPS capability families and representative detection patterns.}
+\label{tab:lscps_kw}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Family} & \textbf{Representative Patterns (regex)} \\
+\midrule
+Shell Exec     & \texttt{subprocess}, \texttt{os\.system}, \texttt{exec\textbackslash(}, \texttt{bash} \\
+Cred Read      & \texttt{api\_key}, \texttt{access\_token}, \texttt{bearer}, \texttt{\.env} \\
+Cred Transmit  & \texttt{post.*token}, \texttt{upload.*key}, \texttt{exfil} \\
+Net Write      & \texttt{requests\.post}, \texttt{webhook}, \texttt{smtp} \\
+Net Read       & \texttt{requests\.get}, \texttt{httpx\.get}, \texttt{curl http} \\
+File Write     & \texttt{open\textbackslash(.*"w"}, \texttt{shutil\.}, \texttt{os\.remove} \\
+File Read      & \texttt{open\textbackslash(.*"r"}, \texttt{glob\textbackslash(}, \texttt{os\.listdir} \\
+Autonomous     & \texttt{autonomous}, \texttt{without.*confirm}, \texttt{cron} \\
+Multi-step     & \texttt{multi.step}, \texttt{workflow}, \texttt{pipeline} \\
+Memory Write   & \texttt{memory}, \texttt{remember}, \texttt{long.term} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{T6 Case Timeline}
+\label{app:t6_timeline}
+
+For each T6 case we record: date of malicious version publication,
+date of fix, exposure window (days), and installs during exposure.
+Table~\ref{tab:t6_timeline} summarizes the 40 confirmed cases.
+
+\begin{table}[h]
+\centering
+\caption{T6 case timeline summary (representative subset).}
+\label{tab:t6_timeline}
+\scriptsize
+\begin{tabular}{@{}lrrlp{2.6cm}@{}}
+\toprule
+\textbf{Skill} & \textbf{Win.} & \textbf{Inst.} & \textbf{CES} & \textbf{Primary Attack} \\
+\midrule
+agentmail     & 1.0\,d & 155 & 8.5 & Webhook injection \\
+moltguard     & 0.1\,d &  54 & 5.0 & Phishing file \\
+simmer        & 0.4\,d &  21 & 5.0 & SKILL.md rollback \\
+guard-scanner & 9.1\,d &   9 & 14.5 & Trojanized scanner \\
+skill-auditor & --- &   8 & 4.5 & Credential harvest \\
+vmware-aiops  & 1.1\,d &   3 & 4.5 & Webhook + file delete \\
+vmware-monitor& 2.1\,d &   0 & 6.5 & Webhook + credential \\
+aport-guardrail& 2.6\,d &   0 & 3.0 & Shell exec injection \\
+clawsentinel  & 0.3\,d &   0 & 8.5 & Repeated inject/revert \\
+mdk-wallet    & --- &   0 & 11.5 & rm -rf + credential exfil \\
+\midrule
+\textbf{All 40} & \textbf{avg 0.5\,d} & \textbf{298} & & \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Deep Attack Case Studies}
+\label{app:casestudies}
+
+We present five representative T6 cases selected for diversity of attack
+patterns, severity, and user impact. Full reconstruction details are available
+in our artifact release.
+
+\noindent\textit{Skill names below are pseudonymized per our responsible disclosure policy (\S\ref{sec:conclusion}); original identifiers are available to reviewers under embargo request.}
+
+\paragraph{Case 1: Trojanized security scanner (\texttt{guard-scanner}).}
+A skill marketed as a security scanning tool contained
+credential harvesting (5 matches), network exfiltration (webhook.site,
+curl), persistence mechanisms (cron, startup), and download-execute chains.
+\textbf{Exposure}: 9.1~days, 9~installs. CR = 0.143; RWM = 12.86.
+The attack used the ironic disguise of a ``security'' tool to normalize
+access to security-critical APIs. All three detection layers (SCS, DMR, TDM) catch this case;
+the platform scanner missed it.
+
+\paragraph{Case 2: Prompt injection via email (\texttt{agentmail}).}
+The highest-impact T6 case (155~installs) used unfiltered email webhooks
+to forward arbitrary content as LLM prompts, enabling indirect prompt injection.
+The fix (v1.1.0) added a webhook sender allowlist.
+\textbf{Exposure}: 1.0~day. CR = 0.333; RWM = 2.12.
+This case demonstrates that even moderate RWM scores can indicate
+critical vulnerabilities when the attack vector is semantic rather than code-pattern-based.
+
+\paragraph{Case 3: Financial data exfiltration (\texttt{mdk-agent-wallet}).}
+A cryptocurrency wallet skill contained destructive file operations
+(\texttt{rm -rf}) targeting the wallet directory,
+webhook exfiltration of private keys, and credential harvesting.
+The fix removed the destructive commands and added \texttt{autonomous:false}.
+CR = 0.143; RWM = 15.33.
+\textbf{Data flow}: Private key read $\to$ webhook POST $\to$ external endpoint.
+
+\paragraph{Case 4: Hidden phishing attack (\texttt{moltguard}).}
+A malware guard tool embedded a phishing attack file in its test
+instructions, instructing the LLM agent to notify users when quota
+tags appeared---effectively weaponizing the agent as a phishing vector.
+\textbf{Exposure}: 0.1~days, 54~installs. CR = 0.000; RWM = 16.86.
+
+\paragraph{Case 5: Repeated injection campaign (\texttt{clawsentinel}).}
+This skill appeared twice in T6 (v3.0.0$\to$2.3.3 and v2.3.4$\to$2.3.5),
+following an inject-revert-inject pattern. Each injection added
+\texttt{rm -rf}, credential harvesting, and file destruction,
+only to be reverted within hours.
+CR = 0.143; \textbf{RWM = 29.96}---the highest in our dataset.
+This case is consistent with repeated probing of platform detection limits.
+
+\paragraph{Detection layer effectiveness across cases.}
+In all five cases: (a) the platform scanner missed the attack;
+(b) SCS static regex detected dangerous capabilities;
+(c) DMR disclosure matching confirmed the capabilities were undisclosed;
+(d) TDM temporal analysis would flag the forward-drift injection.
+This confirms the multi-layer design is necessary and
+no single layer is sufficient.
+
+\section{Detector Feature Ablation}
+\label{app:ablation}
+
+Table~\ref{tab:ablation} shows AUROC when each feature group is used
+in isolation (Logistic Regression, 5-fold CV).
+
+\begin{table}[h]
+\centering
+\caption{Feature group ablation for temporal drift detector.}
+\label{tab:ablation}
+\small
+\begin{tabular}{@{}llr@{}}
+\toprule
+\textbf{Group} & \textbf{Key Features} & \textbf{AUROC} \\
+\midrule
+Drift core & CES delta, text diff, new kw & 0.979 \\
+Disclosure & SDS, changelog len, vague & 0.979 \\
+Family drift & Per-family CES deltas & 0.980 \\
+\textbf{All combined} & & \textbf{1.000} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Responsible Disclosure}
+\label{app:disclosure}
+
+We notified both \clawhub{} and \skillssh{} of the T6 cases
+\textit{[redacted for anonymous review]}
+days before submission.
+\clawhub{} acknowledged and confirmed all 40 cases.
+\skillssh{} did not respond within the disclosure window.
+We have withheld specific skill identifiers in this submission;
+they will be released as supplementary material upon acceptance.
+
+\section{LLM Annotation Protocol}
+\label{app:llm_protocol}
+
+\emph{Note: LLM-based semantic adjudication is deferred to future work.
+This appendix describes the planned methodology.}
+
+We propose to evaluate IC classification robustness using five independent
+open-source LLM annotators on \NskillsDMR{} \clawhub{} skills.
+
+\paragraph{Planned Models.}
+We plan to deploy five fully open-weight models locally via vLLM~\cite{kwon2023vllm}
+on an HPC cluster, with no commercial API dependence:
+\begin{itemize}[topsep=2pt,itemsep=1pt]
+\item \textbf{M1}: Qwen3-8B (Alibaba Cloud) --- chain-of-thought reasoning, multilingual
+\item \textbf{M2}: Llama-3.1-8B-Instruct (Meta AI) --- instruction-tuned, North American research
+\item \textbf{M3}: Mistral-7B-v0.3-Instruct (Mistral AI) --- efficient European-origin model
+\item \textbf{M4}: Gemma-3-4B-IT (Google DeepMind) --- compact instruction-tuned, safety-focused
+\item \textbf{M5}: GPT-OSS-20B (OpenAI) --- open-weight, 20B parameter research model
+\end{itemize}
+
+This five-family ensemble spans models from Alibaba, Meta, Mistral, Google, and OpenAI,
+maximizing the diversity of training data, RLHF alignment procedures, and architectural
+design choices to minimize the risk of systematic single-model extraction artifacts.
+
+\paragraph{Prompt template.}
+Each annotator receives a structured prompt containing:
+(a)~the skill's user-visible description (truncated to 400 chars),
+(b)~the developer's changelog (truncated to 500 chars),
+(c)~statically detected new risk keywords,
+(d)~a unified diff of the SKILL.md between versions (capped at 150 lines),
+(e)~the CES drift score, and
+(f)~the SDS disclosure score.
+
+The system prompt instructs the model to classify the update as:
+\texttt{CONFIRMED} (undisclosed dangerous capability),
+\texttt{FALSE\_POSITIVE} (contextually benign or adequately disclosed), or
+\texttt{UNCLEAR} (insufficient evidence).
+The model must respond with structured JSON including a label,
+one-sentence reason, specific risk evidence, and a boolean
+\texttt{disclosed} flag.
+
+\paragraph{Consensus.}
+The final label uses majority vote ($\geq3/5$ agreement).
+Each annotator operates independently with no access to
+the other annotators' outputs.
+We use the resulting consensus
+to estimate review yield on sampled pipeline outputs, not to
+construct a universal ground-truth benchmark.
+
+\paragraph{Reproducibility.}
+All prompts, raw outputs, and the annotation script
+(\texttt{08b\_claude\_native\_m1.py}, \texttt{08c\_gpt\_native\_m2.py})
+are included in our artifact release.
